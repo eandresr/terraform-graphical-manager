@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main"]
+
+jobs:
+  lint-and-test:
+    name: Lint, test & smoke-test
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      # ------------------------------------------------------------------ #
+      # 1. Checkout
+      # ------------------------------------------------------------------ #
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------ #
+      # 2. Python setup
+      # ------------------------------------------------------------------ #
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # ------------------------------------------------------------------ #
+      # 3. Install dependencies
+      # ------------------------------------------------------------------ #
+      - name: Install package + dev tools
+        run: pip install ".[dev]" pytest pytest-flask
+
+      # ------------------------------------------------------------------ #
+      # 4. Flake8 lint
+      # ------------------------------------------------------------------ #
+      - name: Flake8 lint
+        run: flake8 --max-line-length=99 app/
+
+      # ------------------------------------------------------------------ #
+      # 5. Pytest unit / integration tests
+      # ------------------------------------------------------------------ #
+      - name: Run pytest
+        run: pytest tests/ -v --tb=short
+
+      # ------------------------------------------------------------------ #
+      # 6. App smoke-test  (start Flask, wait, verify it hasn't crashed)
+      # ------------------------------------------------------------------ #
+      - name: Create minimal config/tfg.conf for smoke-test
+        run: |
+          mkdir -p config
+          cat > config/tfg.conf << 'EOF'
+          [workspaces]
+          repos_root = /tmp/tf-repos
+
+          [ui]
+          site_name = CI Smoke Test
+          repo_url = https://github.com/eandresr/terraform-graphical-manager
+          theme = terraform-cloud
+
+          [execution]
+          max_concurrent = 1
+
+          [terraform]
+          versions_folder =
+          default_version = system
+
+          [security]
+          password_hash =
+          EOF
+          mkdir -p /tmp/tf-repos
+
+      - name: Start Flask app (background)
+        run: |
+          python run.py --port 5005 &
+          echo $! > /tmp/flask.pid
+
+      - name: Wait for Flask to be ready (up to 10 s)
+        run: |
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:5005/ > /dev/null 2>&1; then
+              echo "Flask is up after ${i} attempts."
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "Flask did not start within 10 seconds."
+          cat /tmp/flask.pid && kill $(cat /tmp/flask.pid) 2>/dev/null || true
+          exit 1
+
+      - name: Verify key routes respond with HTTP 200
+        run: |
+          curl -sf http://127.0.0.1:5005/ -o /dev/null -w "%{http_code}\n"
+          curl -sf http://127.0.0.1:5005/settings -o /dev/null -w "%{http_code}\n"
+
+      - name: Stop Flask
+        if: always()
+        run: |
+          if [ -f /tmp/flask.pid ]; then
+            kill $(cat /tmp/flask.pid) 2>/dev/null || true
+          fi

@@ -1,0 +1,502 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — Terraform Graphical Manager{% endblock %}
+
+{% block breadcrumb %}
+  <span class="text-gray-400 text-sm">Settings</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-8" x-data="settingsPage()">
+
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Settings</h1>
+      <p class="text-gray-500 text-sm mt-1">Changes are persisted to <code class="text-gray-700 font-mono">tfg.conf</code>.</p>
+    </div>
+    <!-- Save button (top) -->
+    <button type="submit" form="settings-form"
+            class="px-4 py-2 bg-tf-600 hover:bg-tf-700 text-white text-sm font-medium rounded-lg transition-colors">
+      Save settings
+    </button>
+  </div>
+
+  <form id="settings-form" method="POST" action="{{ url_for('settings.settings_save') }}" class="space-y-8">
+
+    <!-- --------------------------------------------------------
+         Section: Workspaces
+         -------------------------------------------------------- -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
+        <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+        </svg>
+        <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">Workspaces</h2>
+      </div>
+      <div class="px-6 py-5 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="site_name">
+            Site name
+          </label>
+          <input id="site_name" name="site_name" type="text"
+                 value="{{ config.site_name }}"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm
+                        focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent"
+                 placeholder="Terraform Graphical Manager">
+          <p class="mt-1 text-xs text-gray-500">
+            Name displayed in the browser tab, sidebar header and page titles.
+          </p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="repo_url">
+            Repository URL
+          </label>
+          <input id="repo_url" name="repo_url" type="url"
+                 value="{{ config.repo_url }}"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono
+                        focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent"
+                 placeholder="https://github.com/your-user/your-fork">
+          <p class="mt-1 text-xs text-gray-500">
+            Shown as the GitHub link in the top bar. Point it to your fork if you have one. Leave empty to hide the link.
+          </p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="repos_root">
+            Repos root
+          </label>
+          <input id="repos_root" name="repos_root" type="text"
+                 value="{{ config.repos_root }}"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono
+                        focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent">
+          <p class="mt-1 text-xs text-gray-500">
+            Absolute or relative path to the directory that contains your Terraform workspaces.
+            Relative paths are resolved from where <code class="font-mono">run.py</code> is executed.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------
+         Section: Execution
+         -------------------------------------------------------- -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
+        <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+        <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">Execution</h2>
+      </div>
+      <div class="px-6 py-5 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="max_concurrent">
+            Max concurrent executions
+          </label>
+          <input id="max_concurrent" name="max_concurrent" type="number" min="1" max="20"
+                 value="{{ config.max_concurrent_executions }}"
+                 class="w-32 px-3 py-2 border border-gray-300 rounded-lg text-sm
+                        focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent">
+          <p class="mt-1 text-xs text-gray-500">
+            Number of Terraform operations that may run in parallel.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------
+         Section: Terraform Versions
+         -------------------------------------------------------- -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
+        <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9m-12 0h10"/>
+        </svg>
+        <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">Terraform Versions</h2>
+      </div>
+
+      <div class="px-6 py-5 space-y-6">
+
+        <!-- System version info -->
+        <div class="flex items-start space-x-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <svg class="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div class="text-sm text-blue-800">
+            <p class="font-medium">System default</p>
+            {% if system_version %}
+              <p class="mt-0.5 font-mono">terraform {{ system_version }}</p>
+              <p class="mt-0.5 text-blue-600">Found on PATH. Used when no specific version is selected.</p>
+            {% else %}
+              <p class="mt-0.5 text-red-600 font-medium">Terraform not found on system PATH.</p>
+              <p class="mt-0.5 text-blue-600">Configure the versions folder below to use a local binary.</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Versions folder -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="versions_folder">
+            Versions folder
+          </label>
+          <input id="versions_folder" name="versions_folder" type="text"
+                 value="{{ config.terraform_versions_folder }}"
+                 x-model="versionsFolder"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono
+                        focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent"
+                 placeholder="/opt/terraform-versions">
+          <p class="mt-1 text-xs text-gray-500">
+            Directory containing subdirectory per version named
+            <code class="font-mono text-gray-700">major_minor_patch</code>
+            (e.g. <code class="font-mono text-gray-700">1_5_7</code>), each holding a
+            <code class="font-mono text-gray-700">terraform</code> executable
+            (<code class="font-mono text-gray-700">terraform.exe</code> on Windows).
+          </p>
+
+          <!-- Expected layout diagram -->
+          <div class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs font-mono text-gray-600">
+            <p class="text-gray-500 mb-1"># Expected layout:</p>
+            <p>&lt;versions_folder&gt;/</p>
+            <p class="ml-4">├── 1_5_7/</p>
+            <p class="ml-8">│   └── terraform</p>
+            <p class="ml-4">├── 1_6_0/</p>
+            <p class="ml-8">│   └── terraform</p>
+            <p class="ml-4">└── 1_8_0/</p>
+            <p class="ml-8">    └── terraform</p>
+          </div>
+        </div>
+
+        <!-- Detected versions -->
+        <div>
+          <p class="text-sm font-medium text-gray-700 mb-2">Detected versions</p>
+          {% if available_versions %}
+            <div class="space-y-1.5">
+              {% for v in available_versions %}
+                <div class="flex items-center space-x-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                  <span class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></span>
+                  <span class="text-sm font-mono font-medium text-green-800">{{ v.version }}</span>
+                  <span class="text-xs text-green-600 truncate">{{ v.binary }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-500">
+              No versions detected.
+              {% if config.terraform_versions_folder %}
+                Check that the folder exists and contains valid subdirectories.
+              {% else %}
+                Configure a versions folder above to enable version management.
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Default version -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="default_version">
+            Default version
+          </label>
+          <select id="default_version" name="default_version"
+                  class="w-72 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white
+                         focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent">
+            <option value="system" {% if config.default_terraform_version == 'system' or not config.default_terraform_version %}selected{% endif %}>
+              {% if system_version %}{{ system_version }} (System Default){% else %}System Default (not found on PATH){% endif %}
+            </option>
+            {% for v in available_versions %}
+              <option value="{{ v.version }}"
+                      {% if config.default_terraform_version == v.version %}selected{% endif %}>
+                {{ v.version }}
+              </option>
+            {% endfor %}
+          </select>
+          <p class="mt-1 text-xs text-gray-500">
+            Applied to workspaces that have no version pinned explicitly.
+          </p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------
+         Section: Portal Security (lock password)
+         -------------------------------------------------------- -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
+        <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+        <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">Portal Security</h2>
+        {% if config.lock_password_hash %}
+          <span class="ml-auto inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+            </svg>
+            <span>Protected</span>
+          </span>
+        {% else %}
+          <span class="ml-auto inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500">
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z"/>
+            </svg>
+            <span>Unlocked</span>
+          </span>
+        {% endif %}
+      </div>
+
+      <div class="px-6 py-5 space-y-5">
+        <p class="text-xs text-gray-500">
+          Set a password to restrict access to the portal. Browser sessions are protected with a login page.
+          Direct API calls require an <code class="font-mono text-gray-700">Authorization: Bearer &lt;token&gt;</code> header.
+          The password is stored as a PBKDF2 hash in <code class="font-mono text-gray-700">tfg.conf</code>.
+        </p>
+
+        <!-- Set / change password -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="lock_password">
+            {% if config.lock_password_hash %}Change password{% else %}Set password{% endif %}
+          </label>
+          <input id="lock_password" name="lock_password" type="password"
+                 autocomplete="new-password"
+                 class="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg text-sm
+                        focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent"
+                 placeholder="{% if config.lock_password_hash %}Enter new password to change…{% else %}New password…{% endif %}">
+          <p class="mt-1 text-xs text-gray-500">
+            Leave blank to keep the current password unchanged.
+          </p>
+        </div>
+
+        {% if config.lock_password_hash %}
+          <!-- API token (loaded on-demand, never in HTML source) -->
+          <div class="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-2"
+               x-data="{
+                 token: null,
+                 shown: false,
+                 loading: false,
+                 async reveal() {
+                   if (!this.token) {
+                     this.loading = true;
+                     try {
+                       const r = await fetch('/api/settings/api-token');
+                       const d = await r.json();
+                       this.token = d.token || null;
+                     } finally { this.loading = false; }
+                   }
+                   this.shown = !this.shown;
+                 },
+                 async copy() {
+                   if (!this.token) await this.reveal();
+                   navigator.clipboard.writeText(this.token)
+                     .then(() => { this.$refs.copyBtn.textContent = 'Copied!'; setTimeout(() => this.$refs.copyBtn.textContent = 'Copy', 1500); })
+                     .catch(() => {});
+                 }
+               }">
+            <p class="text-xs font-semibold text-gray-700">API Bearer Token</p>
+            <p class="text-xs text-gray-500">
+              Use this token for headless / CI access. It is re-generated automatically when you change the password.
+            </p>
+            <div class="flex items-center space-x-2 mt-1">
+              <input :type="shown ? 'text' : 'password'"
+                     :value="token || ''"
+                     readonly
+                     placeholder="Click Show to reveal…"
+                     class="flex-1 font-mono text-xs px-2 py-1.5 bg-white border border-gray-300 rounded-md text-gray-800 select-all placeholder-gray-400">
+              <button type="button" @click="reveal()"
+                      :disabled="loading"
+                      class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-md bg-white hover:bg-gray-50 transition-colors flex-shrink-0"
+                      :class="loading ? 'opacity-50 cursor-wait' : ''">
+                <span x-text="shown ? 'Hide' : (loading ? '…' : 'Show')"></span>
+              </button>
+              <button type="button" x-ref="copyBtn" @click="copy()"
+                      class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-md bg-white hover:bg-gray-50 transition-colors flex-shrink-0">
+                Copy
+              </button>
+            </div>
+            <p x-show="shown && token" class="text-xs text-gray-400 font-mono mt-1 break-all">
+              Authorization: Bearer <span x-text="token"></span>
+            </p>
+          </div>
+
+          <!-- Remove lock -->
+          <div class="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
+            <div>
+              <p class="text-sm font-medium text-red-800">Remove portal lock</p>
+              <p class="text-xs text-red-600 mt-0.5">The portal will become publicly accessible without a password.</p>
+            </div>
+            <button type="button"
+                    onclick="if(confirm('Remove the portal lock password? Anyone on the network will be able to access the portal.')) { document.getElementById('remove-lock-field').value='1'; document.getElementById('settings-form').requestSubmit(); }"
+                    class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors flex-shrink-0 ml-4">
+              Remove lock
+            </button>
+            <input type="hidden" id="remove-lock-field" name="remove_lock_password" value="">
+          </div>
+        {% endif %}
+
+      </div>
+    </section>
+
+    <!-- Save button (bottom) -->
+    <div class="flex justify-end">
+      <button type="submit"
+              class="px-6 py-2.5 bg-tf-600 hover:bg-tf-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+        Save settings
+      </button>
+    </div>
+
+  </form>
+
+  <!-- --------------------------------------------------------
+       Section: Storage Backend (read-only status)
+       -------------------------------------------------------- -->
+  <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
+      <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+      </svg>
+      <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">TERRAFORM_GRAPHICAL Backend</h2>
+      <span class="ml-auto text-xs px-2 py-0.5 rounded-full font-medium
+                   {% if backend_status.type == 'local' %}bg-blue-100 text-blue-700
+                   {% elif backend_status.type == 'aws' %}bg-orange-100 text-orange-700
+                   {% elif backend_status.type == 'gcp' %}bg-red-100 text-red-700
+                   {% elif backend_status.type == 'azure' %}bg-sky-100 text-sky-700{% endif %}">
+        {{ backend_status.label }}
+      </span>
+    </div>
+
+    <div class="px-6 py-5 space-y-4">
+
+      <p class="text-xs text-gray-500">
+        Configured via the <code class="font-mono text-gray-700">TERRAFORM_GRAPHICAL_BACKEND</code> environment variable.
+        This section is read-only — set the variables in your shell or <code class="font-mono text-gray-700">.env</code> file.
+      </p>
+
+      {% if backend_status.type == 'local' %}
+        <!-- Local backend checklist -->
+        <ul class="space-y-2 text-sm">
+
+          <!-- TERRAFORM_GRAPHICAL_BACKEND env var -->
+          <li class="flex items-start space-x-3">
+            {% if backend_status.env_var_set %}
+              <span class="mt-0.5 w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                <svg class="w-3 h-3 text-green-600" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                </svg>
+              </span>
+              <div>
+                <p class="font-mono text-xs text-gray-800">TERRAFORM_GRAPHICAL_BACKEND=<span class="text-blue-700">{{ backend_status.env_var_value }}</span></p>
+                <p class="text-xs text-gray-500 mt-0.5">Explicitly set to local filesystem.</p>
+              </div>
+            {% else %}
+              <span class="mt-0.5 w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M20 12H4"/>
+                </svg>
+              </span>
+              <div>
+                <p class="font-mono text-xs text-gray-500">TERRAFORM_GRAPHICAL_BACKEND <span class="text-gray-400">(not set)</span></p>
+                <p class="text-xs text-gray-400 mt-0.5">Defaulting to local filesystem backend.</p>
+              </div>
+            {% endif %}
+          </li>
+
+          <!-- TERRAFORM_GRAPHICAL_BACKEND_LOCAL_PATH env var -->
+          <li class="flex items-start space-x-3">
+            {% if backend_status.path_var_set %}
+              <span class="mt-0.5 w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                <svg class="w-3 h-3 text-green-600" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                </svg>
+              </span>
+              <div>
+                <p class="font-mono text-xs text-gray-800">TERRAFORM_GRAPHICAL_BACKEND_LOCAL_PATH</p>
+                <p class="text-xs text-gray-500 mt-0.5">Custom path configured.</p>
+              </div>
+            {% else %}
+              <span class="mt-0.5 w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M20 12H4"/>
+                </svg>
+              </span>
+              <div>
+                <p class="font-mono text-xs text-gray-500">TERRAFORM_GRAPHICAL_BACKEND_LOCAL_PATH <span class="text-gray-400">(not set)</span></p>
+                <p class="text-xs text-gray-400 mt-0.5">Using default project directory.</p>
+              </div>
+            {% endif %}
+          </li>
+
+        </ul>
+
+        <!-- Storage path info box -->
+        <div class="flex items-start space-x-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+          <svg class="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+          </svg>
+          <div>
+            <p class="text-xs font-semibold text-gray-700">Storage location</p>
+            <p class="font-mono text-xs text-gray-900 mt-1 break-all">{{ backend_status.path }}</p>
+            <p class="text-xs text-gray-500 mt-1">
+              Execution history, logs, and plan artefacts are stored here.
+              To override, set <code class="font-mono">TERRAFORM_GRAPHICAL_BACKEND_LOCAL_PATH</code>.
+            </p>
+          </div>
+        </div>
+
+      {% else %}
+        <!-- Cloud backend: show env var checklist -->
+        <p class="text-xs font-semibold text-gray-700 mb-2">Required environment variables</p>
+        <ul class="space-y-2">
+          <!-- TERRAFORM_GRAPHICAL_BACKEND itself -->
+          <li class="flex items-center space-x-3">
+            <span class="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+              <svg class="w-3 h-3 text-green-600" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+            </span>
+            <span class="font-mono text-xs text-gray-800">
+              TERRAFORM_GRAPHICAL_BACKEND=<span class="text-blue-700">{{ backend_status.type }}</span>
+            </span>
+          </li>
+          {% for v in backend_status.vars %}
+            <li class="flex items-start space-x-3">
+              {% if v.set %}
+                <span class="mt-0.5 w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                  <svg class="w-3 h-3 text-green-600" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                  </svg>
+                </span>
+                <div>
+                  <p class="font-mono text-xs text-gray-800">{{ v.name }}</p>
+                  {% if v.hint %}
+                    <p class="font-mono text-xs text-gray-400 mt-0.5">{{ v.hint }}</p>
+                  {% endif %}
+                </div>
+              {% else %}
+                <span class="mt-0.5 w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <svg class="w-3 h-3 text-red-600" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </span>
+                <div>
+                  <p class="font-mono text-xs text-red-700">{{ v.name }} <span class="text-red-400 font-sans">(missing)</span></p>
+                </div>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+    </div>
+  </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function settingsPage() {
+    return {
+      versionsFolder: {{ config.terraform_versions_folder | tojson }},
+    };
+  }
+</script>
+{% endblock %}

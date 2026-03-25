@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}State — {{ workspace.name }} — Terraform Graphical Manager{% endblock %}
+
+{% block content %}
+<div class="space-y-5" x-data="stateView('{{ workspace.id }}')">
+
+  <!-- Header -->
+  <div class="bg-white rounded-xl border border-gray-200 p-5 flex items-center justify-between">
+    <div>
+      <h2 class="font-bold text-gray-900 text-lg">Terraform State</h2>
+      <p class="text-xs text-gray-400 font-mono mt-1">{{ workspace.abs_path }}</p>
+    </div>
+    <button @click="loadState()" :disabled="loading"
+            class="btn-secondary text-sm" :class="loading ? 'opacity-60 cursor-wait' : ''">
+      <svg class="w-4 h-4 mr-1.5" :class="loading ? 'animate-spin' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      Refresh State
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div x-show="loading" class="bg-white rounded-xl border border-gray-200 py-16 flex justify-center">
+    <div class="flex flex-col items-center space-y-3">
+      <div class="w-8 h-8 border-2 border-tf-500 border-t-transparent rounded-full animate-spin"></div>
+      <p class="text-gray-400 text-sm">Running <code class="text-gray-500">terraform state pull</code>…</p>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div x-show="error" class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700" x-text="error"></div>
+
+  <!-- State data -->
+  <template x-if="state && !loading">
+    <div class="space-y-5">
+
+      <!-- Metadata cards -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="bg-white rounded-xl border border-gray-200 p-4">
+          <p class="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Resources</p>
+          <p class="text-2xl font-bold text-gray-900" x-text="state.resource_count"></p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 p-4">
+          <p class="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Version</p>
+          <p class="text-2xl font-bold text-gray-900" x-text="state.version || '—'"></p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 p-4">
+          <p class="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Serial</p>
+          <p class="text-2xl font-bold text-gray-900" x-text="state.serial || '—'"></p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 p-4">
+          <p class="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">TF version</p>
+          <p class="text-sm font-bold text-gray-900 font-mono" x-text="state.terraform_version || '—'"></p>
+        </div>
+      </div>
+
+      <!-- Module filter -->
+      <div x-show="state.module_names.length > 1" class="bg-white rounded-xl border border-gray-200 p-4 flex items-center space-x-3">
+        <label class="text-sm text-gray-600 font-medium">Filter by module:</label>
+        <select x-model="selectedModule"
+                class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-tf-400/40">
+          <option value="">All modules</option>
+          <template x-for="m in state.module_names" :key="m">
+            <option :value="m" x-text="m"></option>
+          </template>
+        </select>
+        <span class="text-xs text-gray-400" x-text="filteredResources.length + ' resources'"></span>
+      </div>
+
+      <!-- Resource list -->
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100">
+          <h3 class="font-semibold text-gray-900">Resources</h3>
+        </div>
+        <div class="divide-y divide-gray-50">
+          <template x-for="res in filteredResources" :key="res.address">
+            <div x-data="{ expanded: false }">
+              <div class="px-6 py-3 flex items-center space-x-3 cursor-pointer hover:bg-gray-50"
+                   @click="expanded = !expanded">
+                <svg class="w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0"
+                     :class="expanded ? 'rotate-90' : ''"
+                     fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                </svg>
+                <span class="font-mono text-sm text-gray-900 flex-1" x-text="res.address"></span>
+                <span x-show="res.mode === 'data'"
+                      class="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-mono">data</span>
+                <span class="text-xs text-gray-400 font-mono" x-text="res.provider"></span>
+                <span class="text-xs text-gray-400" x-text="res.instance_count + ' instance(s)'"></span>
+              </div>
+
+              <!-- Instances -->
+              <div x-show="expanded" x-transition class="pb-3">
+                <template x-for="(inst, idx) in res.instances" :key="idx">
+                  <div class="mx-6 mt-2">
+                    <div x-show="inst.index_key !== null" class="text-xs text-gray-400 font-mono mb-1">
+                      index: <span x-text="JSON.stringify(inst.index_key)"></span>
+                    </div>
+                    <div class="bg-gray-950 rounded-xl overflow-x-auto">
+                      <pre class="p-4 text-xs font-mono text-gray-200 leading-5"
+                           x-text="JSON.stringify(inst.attributes, null, 2)"></pre>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+
+          <div x-show="filteredResources.length === 0" class="py-10 text-center">
+            <p class="text-gray-400 text-sm">No resources found.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Empty state -->
+  <div x-show="!state && !loading && !error" class="bg-white rounded-xl border border-gray-200 py-16 text-center">
+    <svg class="mx-auto w-10 h-10 text-gray-300 mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round"
+            d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 2.625c0 2.278-3.694 4.125-8.25 4.125S3.75 11.278 3.75 9m16.5 2.625c0 2.278-3.694 4.125-8.25 4.125S3.75 13.903 3.75 11.625"/>
+    </svg>
+    <p class="text-gray-400 text-sm">Click <strong>Refresh State</strong> to load the current Terraform state.</p>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function stateView(workspaceId) {
+  return {
+    loading: false,
+    error: null,
+    state: null,
+    selectedModule: '',
+
+    get filteredResources() {
+      if (!this.state) return [];
+      if (!this.selectedModule) return this.state.resources;
+      return this.state.resources.filter(r => r.module === this.selectedModule);
+    },
+
+    async loadState() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/state`);
+        const data = await res.json();
+        if (!res.ok) {
+          this.error = data.error || 'Failed to load state.';
+        } else {
+          this.state = data;
+        }
+      } catch(e) {
+        this.error = 'Network error: ' + e.message;
+      } finally {
+        this.loading = false;
+      }
+    }
+  };
+}
+</script>
+{% endblock %}

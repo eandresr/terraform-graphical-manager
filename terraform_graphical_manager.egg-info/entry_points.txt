@@ -1,0 +1,2 @@
+[console_scripts]
+tgm = app.cli:main

@@ -1,0 +1,1059 @@
+Metadata-Version: 2.4
+Name: terraform-graphical-manager
+Version: 0.1.0
+Summary: A local, open-source Terraform Cloud-like UI for your own machines.
+Author: Eduardo Andres Rabano
+License:                                  Apache License
+                                   Version 2.0, January 2004
+                                http://www.apache.org/licenses/
+        
+           TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+        
+           1. Definitions.
+        
+              "License" shall mean the terms and conditions for use, reproduction,
+              and distribution as defined by Sections 1 through 9 of this document.
+        
+              "Licensor" shall mean the copyright owner or entity authorized by
+              the copyright owner that is granting the License.
+        
+              "Legal Entity" shall mean the union of the acting entity and all
+              other entities that control, are controlled by, or are under common
+              control with that entity. For the purposes of this definition,
+              "control" means (i) the power, direct or indirect, to cause the
+              direction or management of such entity, whether by contract or
+              otherwise, or (ii) ownership of fifty percent (50%) or more of the
+              outstanding shares, or (iii) beneficial ownership of such entity.
+        
+              "You" (or "Your") shall mean an individual or Legal Entity
+              exercising permissions granted by this License.
+        
+              "Source" form shall mean the preferred form for making modifications,
+              including but not limited to software source code, documentation
+              source, and configuration files.
+        
+              "Object" form shall mean any form resulting from mechanical
+              transformation or translation of a Source form, including but
+              not limited to compiled object code, generated documentation,
+              and conversions to other media types.
+        
+              "Work" shall mean the work of authorship, whether in Source or
+              Object form, made available under the License, as indicated by a
+              copyright notice that is included in or attached to the work
+              (an example is provided in the Appendix below).
+        
+              "Derivative Works" shall mean any work, whether in Source or Object
+              form, that is based on (or derived from) the Work and for which the
+              editorial revisions, annotations, elaborations, or other modifications
+              represent, as a whole, an original work of authorship. For the purposes
+              of this License, Derivative Works shall not include works that remain
+              separable from, or merely link (or bind by name) to the interfaces of,
+              the Work and Derivative Works thereof.
+        
+              "Contribution" shall mean any work of authorship, including
+              the original version of the Work and any modifications or additions
+              to that Work or Derivative Works thereof, that is intentionally
+              submitted to Licensor for inclusion in the Work by the copyright owner
+              or by an individual or Legal Entity authorized to submit on behalf of
+              the copyright owner. For the purposes of this definition, "submitted"
+              means any form of electronic, verbal, or written communication sent
+              to the Licensor or its representatives, including but not limited to
+              communication on electronic mailing lists, source code control systems,
+              and issue tracking systems that are managed by, or on behalf of, the
+              Licensor for the purpose of discussing and improving the Work, but
+              excluding communication that is conspicuously marked or otherwise
+              designated in writing by the copyright owner as "Not a Contribution."
+        
+              "Contributor" shall mean Licensor and any individual or Legal Entity
+              on behalf of whom a Contribution has been received by Licensor and
+              subsequently incorporated within the Work.
+        
+           2. Grant of Copyright License. Subject to the terms and conditions of
+              this License, each Contributor hereby grants to You a perpetual,
+              worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+              copyright license to reproduce, prepare Derivative Works of,
+              publicly display, publicly perform, sublicense, and distribute the
+              Work and such Derivative Works in Source or Object form.
+        
+           3. Grant of Patent License. Subject to the terms and conditions of
+              this License, each Contributor hereby grants to You a perpetual,
+              worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+              (except as stated in this section) patent license to make, have made,
+              use, offer to sell, sell, import, and otherwise transfer the Work,
+              where such license applies only to those patent claims licensable
+              by such Contributor that are necessarily infringed by their
+              Contribution(s) alone or by combination of their Contribution(s)
+              with the Work to which such Contribution(s) was submitted. If You
+              institute patent litigation against any entity (including a
+              cross-claim or counterclaim in a lawsuit) alleging that the Work
+              or a Contribution incorporated within the Work constitutes direct
+              or contributory patent infringement, then any patent licenses
+              granted to You under this License for that Work shall terminate
+              as of the date such litigation is filed.
+        
+           4. Redistribution. You may reproduce and distribute copies of the
+              Work or Derivative Works thereof in any medium, with or without
+              modifications, and in Source or Object form, provided that You
+              meet the following conditions:
+        
+              (a) You must give any other recipients of the Work or
+                  Derivative Works a copy of this License; and
+        
+              (b) You must cause any modified files to carry prominent notices
+                  stating that You changed the files; and
+        
+              (c) You must retain, in the Source form of any Derivative Works
+                  that You distribute, all copyright, patent, trademark, and
+                  attribution notices from the Source form of the Work,
+                  excluding those notices that do not pertain to any part of
+                  the Derivative Works; and
+        
+              (d) If the Work includes a "NOTICE" text file as part of its
+                  distribution, then any Derivative Works that You distribute must
+                  include a readable copy of the attribution notices contained
+                  within such NOTICE file, excluding those notices that do not
+                  pertain to any part of the Derivative Works, in at least one
+                  of the following places: within a NOTICE text file distributed
+                  as part of the Derivative Works; within the Source form or
+                  documentation, if provided along with the Derivative Works; or,
+                  within a display generated by the Derivative Works, if and
+                  wherever such third-party notices normally appear. The contents
+                  of the NOTICE file are for informational purposes only and
+                  do not modify the License. You may add Your own attribution
+                  notices within Derivative Works that You distribute, alongside
+                  or as an addendum to the NOTICE text from the Work, provided
+                  that such additional attribution notices cannot be construed
+                  as modifying the License.
+        
+              You may add Your own copyright statement to Your modifications and
+              may provide additional or different license terms and conditions
+              for use, reproduction, or distribution of Your modifications, or
+              for any such Derivative Works as a whole, provided Your use,
+              reproduction, and distribution of the Work otherwise complies with
+              the conditions stated in this License.
+        
+           5. Submission of Contributions. Unless You explicitly state otherwise,
+              any Contribution intentionally submitted for inclusion in the Work
+              by You to the Licensor shall be under the terms and conditions of
+              this License, without any additional terms or conditions.
+              Notwithstanding the above, nothing herein shall supersede or modify
+              the terms of any separate license agreement you may have executed
+              with Licensor regarding such Contributions.
+        
+           6. Trademarks. This License does not grant permission to use the trade
+              names, trademarks, service marks, or product names of the Licensor,
+              except as required for reasonable and customary use in describing the
+              origin of the Work and reproducing the content of the NOTICE file.
+        
+           7. Disclaimer of Warranty. Unless required by applicable law or
+              agreed to in writing, Licensor provides the Work (and each
+              Contributor provides its Contributions) on an "AS IS" BASIS,
+              WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+              implied, including, without limitation, any warranties or conditions
+              of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+              PARTICULAR PURPOSE. You are solely responsible for determining the
+              appropriateness of using or redistributing the Work and assume any
+              risks associated with Your exercise of permissions under this License.
+        
+           8. Limitation of Liability. In no event and under no legal theory,
+              whether in tort (including negligence), contract, or otherwise,
+              unless required by applicable law (such as deliberate and grossly
+              negligent acts) or agreed to in writing, shall any Contributor be
+              liable to You for damages, including any direct, indirect, special,
+              incidental, or consequential damages of any character arising as a
+              result of this License or out of the use or inability to use the
+              Work (including but not limited to damages for loss of goodwill,
+              work stoppage, computer failure or malfunction, or any and all
+              other commercial damages or losses), even if such Contributor
+              has been advised of the possibility of such damages.
+        
+           9. Accepting Warranty or Additional Liability. While redistributing
+              the Work or Derivative Works thereof, You may choose to offer,
+              and charge a fee for, acceptance of support, warranty, indemnity,
+              or other liability obligations and/or rights consistent with this
+              License. However, in accepting such obligations, You may act only
+              on Your own behalf and on Your sole responsibility, not on behalf
+              of any other Contributor, and only if You agree to indemnify,
+              defend, and hold each Contributor harmless for any liability
+              incurred by, or claims asserted against, such Contributor by reason
+              of your accepting any such warranty or additional liability.
+        
+           END OF TERMS AND CONDITIONS
+        
+           APPENDIX: How to apply the Apache License to your work.
+        
+              To apply the Apache License to your work, attach the following
+              boilerplate notice, with the fields enclosed by brackets "[]"
+              replaced with your own identifying information. (Don't include
+              the brackets!)  The text should be enclosed in the appropriate
+              comment syntax for the file format. We also recommend that a
+              file or class name and description of purpose be included on the
+              same "printed page" as the copyright notice for easier
+              identification within third-party archives.
+        
+           Copyright [yyyy] [name of copyright owner]
+        
+           Licensed under the Apache License, Version 2.0 (the "License");
+           you may not use this file except in compliance with the License.
+           You may obtain a copy of the License at
+        
+               http://www.apache.org/licenses/LICENSE-2.0
+        
+           Unless required by applicable law or agreed to in writing, software
+           distributed under the License is distributed on an "AS IS" BASIS,
+           WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+           See the License for the specific language governing permissions and
+           limitations under the License.
+        
+Project-URL: Homepage, https://github.com/eandresr/terraform-graphical-manager
+Project-URL: Repository, https://github.com/eandresr/terraform-graphical-manager.git
+Project-URL: Bug Tracker, https://github.com/eandresr/terraform-graphical-manager/issues
+Keywords: terraform,infrastructure,devops,dashboard,ui
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Flask
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: System :: Systems Administration
+Classifier: Topic :: Utilities
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: Flask==3.0.3
+Requires-Dist: Flask-SocketIO==5.3.6
+Requires-Dist: python-engineio==4.9.1
+Requires-Dist: python-socketio==5.11.2
+Requires-Dist: Jinja2==3.1.4
+Requires-Dist: gitpython==3.1.43
+Requires-Dist: boto3==1.34.69
+Requires-Dist: google-cloud-storage==2.16.0
+Requires-Dist: azure-storage-blob==12.19.1
+Requires-Dist: python-dotenv==1.0.1
+Requires-Dist: python-hcl2==4.3.2
+Requires-Dist: requests==2.31.0
+Provides-Extra: dev
+Requires-Dist: pycodestyle>=2.11; extra == "dev"
+Requires-Dist: flake8>=7.0; extra == "dev"
+Requires-Dist: pip-audit>=2.7; extra == "dev"
+Dynamic: license-file
+
+<div align="center">
+  <img src="static/img/icon.png" alt="Terraform Graphical Manager" width="96" />
+  <h1>Terraform Graphical Manager</h1>
+  <p><strong>A local, open-source Terraform Cloud-like UI for your own machines.</strong></p>
+  <p>
+    <a href="#-features">Features</a> ·
+    <a href="#-installation">Installation</a> ·
+    <a href="#-configuration">Configuration</a> ·
+    <a href="#-storage-backends">Storage Backends</a> ·
+    <a href="#-terraform-version-management">Version Management</a> ·
+    <a href="#-rest-api">REST API</a> ·
+    <a href="#-security">Security</a>
+  </p>
+</div>
+
+---
+
+Terraform Graphical Manager (TGM) is an open-source Python web application that provides a beautiful graphical dashboard for managing Terraform workspaces stored locally on disk.  
+No cloud account required. No authentication. No internet needed. Runs entirely on your machine.
+
+---
+
+## ✨ Features
+
+| Category | Capability |
+|---|---|
+| **Dashboard** | Workspace tree overview · Stats (workspaces, running, queued, plans, applies, errors) · Error spotlight with log snippet |
+| **Workspace detail** | Provider & backend detection · Git branch/commit info · Terraform version pinning per workspace |
+| **Execution** | `plan` and `apply` with real-time log streaming via Socket.IO · Concurrent execution queue · Cancelation support |
+| **Plan diff** | Color-coded resource changes (create / update / delete / no-op) parsed from `plan.json` |
+| **State viewer** | `terraform state pull` parsed and displayed as a navigable resource browser |
+| **Drift detection** | `terraform plan -refresh-only` to detect configuration drift automatically |
+| **Dependency graph** | `terraform graph` rendered interactively with D3.js (zoom, pan, click) |
+| **Outputs** | `terraform output -json` displayed with sensitive values masked |
+| **Git integration** | Branch, commit hash, author, message display · One-click `git pull` |
+| **Version management** | Multiple local Terraform binaries organized by folder · Per-workspace version pin · Per-run override via modal |
+| **Settings UI** | Visual panel to edit all `tfg.conf` settings · Backend checklist · Site name customization |
+| **Storage backends** | Local filesystem · AWS S3 · GCP Cloud Storage · Azure Blob Storage |
+| **Credential isolation** | Each execution runs with its own isolated environment — no credential leakage |
+
+---
+
+## 📋 Prerequisites
+
+- Python **3.9+**
+- **Terraform CLI** installed and in `PATH` (or configure local version binaries — see [Version Management](#-terraform-version-management))
+- **Git CLI** in `PATH` (for Git integration features)
+- Terraform repositories already cloned on disk
+
+---
+
+## 🚀 Installation
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/eandresr/terraform-graphical-manager.git
+cd terraform-graphical-manager
+
+# 2. Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+
+# 3. Install the package and its dependencies
+pip install .
+
+# 3b. Also install dev tools (linting, auditing)
+pip install ".[dev]"
+
+# 4. Create your configuration file
+cp config/tfg.conf.example tfg.conf
+# Edit tfg.conf — at minimum, set repos_root to your Terraform repos directory
+
+# 5. Launch
+python run.py
+```
+
+Open **http://localhost:5005** in your browser.
+
+> **Port** defaults to `5005`. Override with `PORT=8080 python run.py`.  
+> **Debug mode** defaults to off. Enable with `DEBUG=true python run.py`.
+
+---
+
+## ⚙️ Configuration
+
+All settings are stored in **`tfg.conf`** (INI format) in the project root.  
+You can also edit everything from the **Settings UI** at `/settings` — changes are written back to `tfg.conf` automatically.
+
+### Full `tfg.conf` reference
+
+```ini
+[workspaces]
+# Root directory containing your Terraform workspace folders.
+# Accepts absolute paths or paths relative to where run.py is executed.
+# Tilde (~) expansion is supported.
+repos_root = ~/terraform
+
+[ui]
+# Custom name shown in the browser tab, sidebar brand, and page titles.
+# Useful when multiple team members clone the project under different names.
+site_name = Terraform Graphical Manager
+
+# UI theme (currently only terraform-cloud is available)
+theme = terraform-cloud
+
+[execution]
+# Maximum number of Terraform operations that may run concurrently.
+max_concurrent = 3
+
+[terraform]
+# Path to a directory containing local Terraform version binaries.
+# Each subdirectory must be named  major_minor_patch  (e.g. 1_5_7)
+# and contain a terraform  (or terraform.exe) binary.
+# Leave empty to use only the system Terraform binary.
+versions_folder =
+
+# Global default Terraform version used when a workspace has no version pinned.
+# Write "system" (or leave empty) to use the binary found on PATH.
+default_version = system
+```
+
+### Configuration key summary
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `workspaces.repos_root` | path | `~/terraform` | Root directory of your Terraform repositories |
+| `ui.site_name` | string | `Terraform Graphical Manager` | Application name displayed in the UI |
+| `ui.theme` | string | `terraform-cloud` | Visual theme |
+| `execution.max_concurrent` | integer | `3` | Max parallel Terraform executions |
+| `terraform.versions_folder` | path | _(empty)_ | Directory containing local Terraform binaries |
+| `terraform.default_version` | string | `system` | Default Terraform version (`system` = PATH binary) |
+
+---
+
+## 💾 Storage Backends
+
+Execution history, logs, and plan artefacts are **always persisted** after each run.  
+By default a **local filesystem backend** is used. You can switch to a cloud backend by setting environment variables — no code changes required.
+
+### Choosing a backend
+
+Set the `TERRAFORM_GRAPHICAL_BACKEND` environment variable before starting the app:
+
+| Value | Storage |
+|---|---|
+| _(unset)_ or `local` | Local filesystem (default) |
+| `aws` | AWS S3 |
+| `gcp` | GCP Cloud Storage |
+| `azure` | Azure Blob Storage |
+
+---
+
+### 🗂️ Local filesystem (default)
+
+```bash
+# Optional — override the storage directory (default: ./TERRAFORM_GRAPHICAL_BACKEND/)
+export TERRAFORM_GRAPHICAL_BACKEND_LOCAL_PATH=/data/tgm-history
+```
+
+Data is stored at `./TERRAFORM_GRAPHICAL_BACKEND/` relative to the working directory unless overridden.
+
+---
+
+### ☁️ AWS S3
+
+```bash
+export TERRAFORM_GRAPHICAL_BACKEND=aws
+export TERRAFORM_GRAPHICAL_BACKEND_BUCKET=my-tgm-bucket
+export TERRAFORM_GRAPHICAL_BACKEND_AWS_ACCESS_KEY_ID=AKIA…
+export TERRAFORM_GRAPHICAL_BACKEND_AWS_SECRET_ACCESS_KEY=…
+export TERRAFORM_GRAPHICAL_BACKEND_AWS_REGION=us-east-1
+```
+
+---
+
+### ☁️ GCP Cloud Storage
+
+```bash
+export TERRAFORM_GRAPHICAL_BACKEND=gcp
+export TERRAFORM_GRAPHICAL_BACKEND_BUCKET=my-tgm-bucket
+export TERRAFORM_GRAPHICAL_BACKEND_GOOGLE_CREDENTIALS='{"type":"service_account",…}'
+```
+
+---
+
+### ☁️ Azure Blob Storage
+
+```bash
+export TERRAFORM_GRAPHICAL_BACKEND=azure
+export TERRAFORM_GRAPHICAL_BACKEND_CONTAINER=terraform-manager
+export TERRAFORM_GRAPHICAL_BACKEND_CONNECTION_STRING="DefaultEndpointsProtocol=https;…"
+```
+
+---
+
+### Storage structure
+
+The on-disk layout is identical across all backends, making migration straightforward:
+
+```
+workspaces/
+└── {workspace-id}/
+    ├── workspace_config.json     ← per-workspace settings (terraform version pin, …)
+    └── runs/
+        └── {timestamp}/
+            ├── metadata.json     ← id, command, status, duration, providers, …
+            ├── plan.log          ← raw terraform plan output
+            ├── apply.log         ← raw terraform apply output
+            ├── plan.json         ← terraform show -json output
+            └── tfplan.binary     ← binary plan artefact
+```
+
+> **Backend status checklist** — the Settings UI (`/settings`) shows which environment variables are set or missing for the active backend and their masked values.
+
+---
+
+## 🔧 Terraform Version Management
+
+TGM lets you maintain multiple local Terraform binaries and pick the right one per workspace or per run.
+
+### Setting up local versions
+
+1. Create a versions folder (any path):
+
+```
+/opt/terraform-versions/
+├── 1_5_7/
+│   └── terraform          (must be executable)
+├── 1_6_0/
+│   └── terraform
+└── 1_7_2/
+    └── terraform
+```
+
+2. Set `terraform.versions_folder` in `tfg.conf` (or in the Settings UI) to point at that folder:
+
+```ini
+[terraform]
+versions_folder = /opt/terraform-versions
+default_version = 1_6_0
+```
+
+### Version selection priority
+
+When an execution starts, the binary is resolved in this order:
+
+```
+Per-run override (modal dropdown)
+        ↓
+Workspace-pinned version (saved in workspace_config.json)
+        ↓
+Global default (terraform.default_version in tfg.conf)
+        ↓
+System Terraform binary (PATH)
+```
+
+### Version display format
+
+| Context | Label shown |
+|---|---|
+| System binary | `1.5.7 (System Default)` |
+| Local binary | `1.6.0` |
+
+---
+
+## 🔌 REST API
+
+All UI features are powered by a JSON REST API. Base path: `/api/`
+
+### Workspaces
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/workspaces` | List all discovered workspaces |
+| `GET` | `/api/workspace/{id}` | Get workspace details |
+| `GET` | `/api/workspace/{id}/credentials` | Credential status per provider |
+| `GET` | `/api/workspace/{id}/executions` | List all runs for a workspace |
+| `GET` | `/api/workspace/{id}/state` | `terraform state pull` parsed as JSON |
+| `GET` | `/api/workspace/{id}/graph` | `terraform graph` as `{nodes, links}` for D3 |
+| `GET` | `/api/workspace/{id}/drift` | Drift detection result |
+| `GET` | `/api/workspace/{id}/lock` | State lock status |
+| `GET` | `/api/workspace/{id}/output` | `terraform output -json` (sensitive values masked) |
+| `POST` | `/api/workspace/{id}/git-pull` | Run `git pull` |
+| `GET` | `/api/workspace/{id}/version` | Get pinned/effective Terraform version |
+| `POST` | `/api/workspace/{id}/version` | Pin a Terraform version for the workspace |
+
+### Executions
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/workspace/{id}/run` | Submit a `plan` or `apply` |
+| `GET` | `/api/executions/{id}` | Get execution status |
+| `GET` | `/api/executions/{id}/logs?offset=N` | Stream logs (from offset) |
+| `GET` | `/api/executions/{id}/plan` | Parsed plan diff |
+| `POST` | `/api/executions/{id}/cancel` | Cancel a running execution |
+
+#### `POST /api/workspace/{id}/run` — request body
+
+```json
+{
+  "command": "plan",
+  "env_vars": {
+    "AWS_ACCESS_KEY_ID": "AKIA…",
+    "AWS_SECRET_ACCESS_KEY": "…",
+    "AWS_DEFAULT_REGION": "us-east-1"
+  },
+  "plan_execution_id": null,
+  "terraform_version_override": "1.6.0"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `command` | `"plan"` \| `"apply"` | Terraform operation |
+| `env_vars` | object | Provider credentials for this run only |
+| `plan_execution_id` | string \| null | For `apply` — reference an existing plan's execution ID |
+| `terraform_version_override` | string | Override version for this run only (`"system"` = PATH binary) |
+
+### Terraform Versions
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/versions` | List available local versions + system version |
+
+### Settings
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/settings` | Visual settings page |
+| `POST` | `/settings` | Save settings to `tfg.conf` |
+
+---
+
+## ⚡ Execution Queue
+
+The application maintains an in-memory execution queue backed by Python worker threads.
+
+```
+        ┌──────────┐     ┌──────────┐     ┌──────────┐
+submit  │ Worker 1 │     │ Worker 2 │     │ Worker 3 │
+──────► │ running  │     │ queued   │     │ queued   │
+        └──────────┘     └──────────┘     └──────────┘
+              │
+              ▼
+        queued → running → completed
+                        ↘ failed
+                        ↘ canceled
+```
+
+- Default concurrency: **3** simultaneous executions (configurable via `execution.max_concurrent`)
+- Each execution is isolated with its own environment variable dictionary
+- Log output is streamed line-by-line to the browser via **Socket.IO**
+- Users can **cancel** any queued or running execution from the UI
+- Historical executions are loaded from the storage backend on demand
+
+---
+
+## 🔐 Security & Credential Isolation
+
+Each Terraform execution receives a **clean, isolated environment**:
+
+```python
+# Never inherits os.environ — only explicitly provided credentials are passed
+subprocess.Popen(cmd, env=isolated_env, cwd=workspace_path)
+```
+
+Key security properties:
+
+- **No credential leakage** between concurrent executions using different accounts
+- **Credentials are never persisted to disk** — they exist only in memory for the duration of the execution
+- **No `shell=True`** — all subprocess calls use argument lists to prevent injection
+- **Sensitive state attributes** are masked in the State Viewer
+- **Sensitive Terraform outputs** are masked as `***sensitive***`
+
+### Provider credential variables
+
+| Provider | Required variables | Optional variables |
+|---|---|---|
+| **AWS** | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | `AWS_DEFAULT_REGION`, `AWS_SESSION_TOKEN` |
+| **GCP** | `GOOGLE_CREDENTIALS` | `GOOGLE_PROJECT` |
+| **Azure** | `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`, `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET` | — |
+
+---
+
+## 🗂️ Project Structure
+
+```
+terraform-graphical-manager/
+├── run.py                         ← entry point (python run.py)
+├── tfg.conf                       ← your local configuration (gitignored)
+├── requirements.txt
+│
+├── app/
+│   ├── app.py                     ← Flask app factory
+│   ├── config.py                  ← tfg.conf parser (Config class)
+│   ├── workspace_scanner.py       ← recursive .tf discovery → workspace tree
+│   ├── provider_detector.py       ← AWS / GCP / Azure provider detection
+│   ├── backend_detector.py        ← s3 / gcs / azurerm backend detection
+│   ├── env_validator.py           ← credential detection + isolated env builder
+│   ├── terraform_runner.py        ← subprocess Terraform integration
+│   ├── execution_queue.py         ← thread-based execution queue + lifecycle
+│   ├── plan_parser.py             ← plan.json resource_changes parser
+│   ├── state_parser.py            ← terraform state pull parser
+│   ├── version_manager.py         ← local Terraform binary discovery
+│   │
+│   ├── storage/
+│   │   ├── __init__.py            ← backend factory (env-based selection)
+│   │   ├── local_backend.py       ← local filesystem backend
+│   │   ├── aws_backend.py         ← AWS S3 backend
+│   │   ├── gcp_backend.py         ← GCP Cloud Storage backend
+│   │   └── azure_backend.py       ← Azure Blob Storage backend
+│   │
+│   └── routes/
+│       ├── workspace_routes.py    ← UI pages (dashboard, workspace detail)
+│       ├── execution_routes.py    ← execution detail page
+│       ├── api_routes.py          ← JSON REST API
+│       └── settings_routes.py     ← Settings UI page
+│
+├── templates/
+│   ├── base.html                  ← sidebar + topbar layout
+│   ├── dashboard.html             ← workspace overview + stats + error spotlight
+│   ├── workspace.html             ← workspace detail (Overview / Runs / State / Graph / Outputs)
+│   ├── execution_modal.html       ← credential + version + confirm modal
+│   ├── execution_detail.html      ← live log streaming page
+│   ├── plan_diff.html             ← plan resource diff view
+│   ├── state_view.html            ← Terraform state browser
+│   ├── graph_view.html            ← D3.js dependency graph
+│   └── settings.html              ← visual settings panel
+│
+├── static/
+│   ├── css/main.css
+│   ├── img/icon.png               ← application icon / favicon
+│   └── js/
+│       ├── main.js
+│       └── graph.js               ← D3.js force-directed graph renderer
+│
+└── config/
+    └── tfg.conf.example           ← configuration template
+```
+
+---
+
+## 🏗️ Architecture Overview
+
+```
+Browser (Alpine.js + TailwindCSS)
+        │
+        │  HTTP + Socket.IO (real-time logs)
+        ▼
+Flask Web Application
+├── workspace_routes   → dashboard, workspace detail pages
+├── execution_routes   → execution detail page
+├── api_routes         → JSON REST API (consumed by Alpine.js)
+└── settings_routes    → settings page (reads/writes tfg.conf)
+        │
+        ├── WorkspaceScanner    → recursive .tf file discovery
+        ├── TerraformRunner     → subprocess: init / plan / apply / state / graph / output
+        ├── ExecutionQueue      → thread pool (max_concurrent workers)
+        ├── VersionManager      → local binary discovery + resolution
+        └── StorageBackend      → local / S3 / GCS / Azure
+                │
+                ▼
+        Terraform CLI (subprocess)   +   Storage (disk / cloud)
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions of all kinds are welcome — bug reports, feature requests, documentation improvements, and code.
+
+Please read the **[Contributing Guide](CONTRIBUTING.md)** for the full workflow:
+
+1. [Fork the repository](../../fork) and clone your fork
+2. Create a feature branch from `main`: `git checkout -b feat/your-feature`
+3. Make your changes following [PEP 8](https://peps.python.org/pep-0008/) style
+4. Open a GitHub Issue describing the change before submitting large PRs
+5. Submit a Pull Request referencing the issue with `Closes #N`
+
+See also:
+
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — community standards
+- [SECURITY.md](SECURITY.md) — responsible disclosure and security model
+- [.github/pull_request_template.md](.github/pull_request_template.md) — PR checklist
+
+---
+
+## 📄 License
+
+[MIT](LICENSE)
+
+
+---
+
+## Overview
+
+Terraform Graphical Manager (TGM) is an open-source Python web application that provides a Terraform Cloud-like graphical dashboard for managing Terraform workspaces stored locally on disk. It requires no remote connection, no authentication, and runs entirely on your machine.
+
+It discovers workspaces automatically, detects providers and backends, executes real Terraform commands (`init`, `plan`, `apply`), streams logs in real-time, visualizes plan diffs, inspects state, detects drift, renders dependency graphs, and stores execution history in cloud storage of your choice (AWS S3, GCP GCS, or Azure Blob).
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                     Flask Web Application                    │
+│                                                              │
+│  ┌────────────────┐  ┌────────────────┐  ┌───────────────┐  │
+│  │ workspace_     │  │ execution_     │  │  api_routes   │  │
+│  │ routes.py      │  │ routes.py      │  │               │  │
+│  └────────────────┘  └────────────────┘  └───────────────┘  │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │                   Execution Queue                    │    │
+│  │   ┌───────────┐  ┌───────────┐  ┌───────────┐       │    │
+│  │   │  Worker 1 │  │  Worker 2 │  │  Worker 3 │       │    │
+│  │   └───────────┘  └───────────┘  └───────────┘       │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                                                              │
+│  ┌────────────────┐  ┌────────────────┐  ┌───────────────┐  │
+│  │ workspace_     │  │ terraform_     │  │   storage/    │  │
+│  │ scanner.py     │  │ runner.py      │  │  (S3/GCS/AZ)  │  │
+│  └────────────────┘  └────────────────┘  └───────────────┘  │
+│                                                              │
+│  ┌────────────┐  ┌───────────────┐  ┌────────────────────┐  │
+│  │ plan_      │  │ state_        │  │  env_validator.py  │  │
+│  │ parser.py  │  │ parser.py     │  │                    │  │
+│  └────────────┘  └───────────────┘  └────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+         │                   │
+         ▼                   ▼
+  Terraform CLI         Cloud Storage
+  (subprocess)       (S3 / GCS / Azure)
+```
+
+---
+
+## Project File Structure
+
+```
+terraform-graphical-manager/
+├── README.md
+├── requirements.txt
+├── run.py
+├── tfg.conf                    ← create from config/tfg.conf.example
+│
+├── app/
+│   ├── __init__.py
+│   ├── app.py                  ← Flask app factory
+│   ├── config.py               ← tfg.conf parser
+│   ├── workspace_scanner.py    ← recursive .tf discovery
+│   ├── provider_detector.py    ← AWS / GCP / Azure provider detection
+│   ├── backend_detector.py     ← s3 / gcs / azurerm backend detection
+│   ├── env_validator.py        ← credential detection + validation
+│   ├── terraform_runner.py     ← subprocess terraform integration
+│   ├── execution_queue.py      ← thread-based execution queue
+│   ├── plan_parser.py          ← plan.json resource_changes parser
+│   ├── state_parser.py         ← terraform state pull parser
+│   │
+│   ├── storage/
+│   │   ├── __init__.py         ← backend factory
+│   │   ├── aws_backend.py      ← S3 storage
+│   │   ├── gcp_backend.py      ← GCS storage
+│   │   └── azure_backend.py    ← Azure Blob storage
+│   │
+│   └── routes/
+│       ├── __init__.py
+│       ├── workspace_routes.py ← UI page routes
+│       ├── execution_routes.py ← execution management routes
+│       └── api_routes.py       ← JSON REST API routes
+│
+├── templates/
+│   ├── base.html               ← sidebar + topbar layout
+│   ├── dashboard.html          ← workspace tree overview
+│   ├── workspace.html          ← workspace detail + tabs
+│   ├── execution_modal.html    ← credential + confirm modal
+│   ├── plan_diff.html          ← plan resource diff view
+│   ├── state_view.html         ← terraform state browser
+│   └── graph_view.html         ← D3.js dependency graph
+│
+├── static/
+│   ├── css/
+│   │   └── main.css
+│   └── js/
+│       ├── main.js
+│       └── graph.js            ← D3.js graph renderer
+│
+└── config/
+    └── tfg.conf.example
+```
+
+---
+
+## Installation
+
+### Prerequisites
+
+- Python 3.11+
+- Terraform CLI installed and in `PATH`
+- Git CLI installed and in `PATH`
+- Terraform repositories already cloned on disk
+
+### Steps
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/terraform-graphical-manager
+cd terraform-graphical-manager
+
+# Create and activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install the package
+pip install .
+
+# Create your configuration file
+cp config/tfg.conf.example tfg.conf
+# Edit tfg.conf and set repos_root to your Terraform repos directory
+
+# Run the application
+python run.py
+```
+
+Open your browser at `http://localhost:5000`.
+
+---
+
+## Configuration
+
+Edit `tfg.conf`:
+
+```ini
+[workspaces]
+repos_root=/data/terraform/repos
+
+[ui]
+theme=terraform-cloud
+
+[execution]
+max_concurrent=3
+```
+
+| Key | Description | Default |
+|-----|-------------|---------|
+| `workspaces.repos_root` | Root directory containing Terraform repos | `~/terraform` |
+| `ui.theme` | UI theme name | `terraform-cloud` |
+| `execution.max_concurrent` | Max parallel Terraform executions | `3` |
+
+---
+
+## Cloud Storage Backend
+
+Execution history and logs are always persisted. By default, when no cloud
+backend is configured, a **local filesystem backend** is used — data is
+stored in a directory called `TERRAFORM_GRAPHICAL_BACKEND/` inside the
+project root (or the path set via `TERRAFORM_GRAPHICAL_BACKEND_LOCAL_PATH`).
+
+The on-disk layout is identical to the cloud backends, so migrating to S3/GCS/Azure
+is as simple as uploading the folder contents and pointing the environment variables
+at the new destination:
+
+```bash
+# Explicit local backend (or just unset the variable — same result)
+export TERRAFORM_GRAPHICAL_BACKEND=local
+
+# Override storage directory (optional)
+export TERRAFORM_GRAPHICAL_BACKEND_LOCAL_PATH=/data/tgm-history
+```
+
+### AWS S3
+
+```bash
+export TERRAFORM_GRAPHICAL_BACKEND=aws
+export TERRAFORM_GRAPHICAL_BACKEND_BUCKET=my-tf-manager-bucket
+export TERRAFORM_GRAPHICAL_BACKEND_AWS_ACCESS_KEY_ID=AKIA...
+export TERRAFORM_GRAPHICAL_BACKEND_AWS_SECRET_ACCESS_KEY=...
+export TERRAFORM_GRAPHICAL_BACKEND_AWS_REGION=us-east-1
+```
+
+### GCP GCS
+
+```bash
+export TERRAFORM_GRAPHICAL_BACKEND=gcp
+export TERRAFORM_GRAPHICAL_BACKEND_BUCKET=my-tf-manager-bucket
+export TERRAFORM_GRAPHICAL_BACKEND_GOOGLE_CREDENTIALS='{"type":"service_account",...}'
+```
+
+### Azure Blob
+
+```bash
+export TERRAFORM_GRAPHICAL_BACKEND=azure
+export TERRAFORM_GRAPHICAL_BACKEND_CONTAINER=terraform-manager
+export TERRAFORM_GRAPHICAL_BACKEND_CONNECTION_STRING="DefaultEndpointsProtocol=https;..."
+```
+
+### Storage Structure
+
+```
+workspaces/
+└── {workspace-name}/
+    └── runs/
+        └── {timestamp}/
+            ├── metadata.json
+            ├── plan.log
+            ├── apply.log
+            ├── plan.json
+            └── tfplan.binary
+```
+
+---
+
+## Execution Queue
+
+The application maintains a local in-memory execution queue backed by Python worker threads.
+
+- **Default concurrency**: 3 simultaneous executions
+- Each execution is isolated with its own environment variable dictionary
+- Executions pass through states: `queued → running → completed / failed / canceled`
+- Log output is streamed in real-time via Socket.IO WebSocket
+- Users can cancel a running execution from the UI
+
+### Why a Queue?
+
+Multiple workspaces may need to run `plan` or `apply` at the same time. A queue prevents resource contention and ensures proper state file locking semantics.
+
+---
+
+## Credential Isolation
+
+Each Terraform execution receives its own environment dictionary built from:
+
+1. A clean base (no host environment variables by default)
+2. Only the credentials the user configures per execution in the credential modal
+
+This prevents credential leakage between concurrent executions that use different AWS/GCP/Azure accounts.
+
+```python
+# subprocess called with explicit env dict, never inheriting os.environ
+subprocess.Popen(cmd, env=isolated_env, cwd=workspace_path)
+```
+
+---
+
+## Plan Visualization
+
+After `terraform plan`, the tool runs:
+
+```bash
+terraform show -json tfplan.binary > plan.json
+```
+
+The `plan.json` is parsed and resource changes are displayed in a color-coded diff:
+
+| Action | Color |
+|--------|-------|
+| `create` | Green |
+| `update` | Yellow |
+| `delete` | Red |
+| `no-op` | Gray |
+
+---
+
+## State Viewer
+
+`terraform state pull` is executed and the JSON output is parsed to display:
+
+- Resource list with type, name, module
+- Per-resource attributes (sensitive attributes hidden)
+- Module hierarchy navigation
+
+---
+
+## Drift Detection
+
+Drift detection runs `terraform plan -refresh-only -json` and checks whether any changes are detected. If drift is found, the workspace card shows a **DRIFT DETECTED** indicator in the sidebar and overview.
+
+---
+
+## Dependency Graph
+
+`terraform graph` outputs DOT format. The application:
+
+1. Parses the DOT graph
+2. Converts nodes/edges to JSON
+3. Renders with D3.js force-directed layout
+4. Supports zoom, pan, and node click to inspect resource details
+
+---
+
+## Git Integration
+
+Each workspace directory is expected to be a Git repository. The application:
+
+- Detects current branch, last commit hash, author, and message
+- Displays this information in the workspace overview
+- Provides a **Pull latest changes** button that runs `git pull`
+
+---
+
+## Security Notes
+
+- All Terraform commands are invoked via `subprocess` with a list of arguments (no `shell=True`)
+- Workspace paths are validated to be within `repos_root` (path traversal prevention)
+- Credentials entered in the modal are never persisted to disk; they exist only in memory for the duration of the execution
+- Sensitive state attributes are masked in the UI
+
+---
+
+## License
+
+MIT License

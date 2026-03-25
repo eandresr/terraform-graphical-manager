@@ -1,0 +1,222 @@
+/* Terraform Graphical Manager — Custom Styles
+   TailwindCSS handles most styling via utility classes.
+   This file contains only components that can't be done inline.
+*/
+
+/* ── Typography ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Scrollbar styling ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+/* ── Base ── */
+html { font-size: 15px; }
+body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+code, pre, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+/* ── Sidebar tree animation ── */
+#sidebar { transition: width 0.2s ease; }
+.sidebar-item { transition: background-color 0.12s ease, color 0.12s ease; }
+
+/* ================================================================
+   BUTTON COMPONENTS
+   ================================================================ */
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background-color: #5c4ee5;
+  color: #ffffff;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+}
+.btn-primary:hover { background-color: #4832da; box-shadow: 0 2px 8px rgba(92,78,229,0.3); }
+.btn-primary:active { background-color: #3d27c3; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background-color: #ffffff;
+  color: #374151;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+.btn-secondary:hover { background-color: #f9fafb; border-color: #9ca3af; }
+.btn-secondary:active { background-color: #f3f4f6; }
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background-color: #dc2626;
+  color: #ffffff;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+.btn-danger:hover { background-color: #b91c1c; }
+
+/* ================================================================
+   TAB COMPONENTS
+   ================================================================ */
+
+.tab {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+}
+.tab-active {
+  background-color: #ede9fe;
+  color: #5c4ee5;
+}
+.tab-inactive {
+  color: #6b7280;
+}
+.tab-inactive:hover {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+/* ================================================================
+   STATUS BADGES
+   ================================================================ */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.status-queued    { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.status-running   { background-color: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+.status-completed { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.status-failed    { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+.status-canceled  { background-color: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
+
+/* Running pulse animation */
+.status-running::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #3b82f6;
+  margin-right: 5px;
+  animation: pulse-dot 1.4s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ================================================================
+   PROVIDER BADGES
+   ================================================================ */
+
+.provider-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.provider-aws     { background-color: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+.provider-google  { background-color: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; }
+.provider-azurerm { background-color: #e3f2fd; color: #0277bd; border: 1px solid #81d4fa; }
+.provider-kubernetes { background-color: #e8eaf6; color: #3949ab; border: 1px solid #9fa8da; }
+.provider-helm    { background-color: #fce4ec; color: #c62828; border: 1px solid #ef9a9a; }
+.provider-github  { background-color: #f3f4f6; color: #1f2937; border: 1px solid #9ca3af; }
+.provider-datadog { background-color: #fff8e1; color: #f57f17; border: 1px solid #fff176; }
+.provider-vault   { background-color: #f3e5f5; color: #6a1b9a; border: 1px solid #ce93d8; }
+
+/* ================================================================
+   LOG / TERMINAL OUTPUT
+   ================================================================ */
+
+#log-container,
+#log-output,
+.log-panel pre {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  tab-size: 2;
+}
+
+/* ANSI-like color hints (applied via JS class injection) */
+.log-error   { color: #f87171; }
+.log-warning { color: #fbbf24; }
+.log-success { color: #34d399; }
+.log-info    { color: #60a5fa; }
+.log-section { color: #a78bfa; font-weight: 600; }
+
+/* ================================================================
+   PLAN DIFF COLORS
+   ================================================================ */
+
+.diff-create { background-color: rgba(16, 185, 129, 0.08); }
+.diff-update { background-color: rgba(245, 158, 11, 0.08); }
+.diff-delete { background-color: rgba(239, 68, 68, 0.08); }
+
+/* ================================================================
+   GRAPH
+   ================================================================ */
+
+#graph-svg .node circle {
+  stroke-width: 2;
+  cursor: pointer;
+  transition: r 0.15s ease;
+}
+#graph-svg .node circle:hover { stroke-width: 3; }
+#graph-svg .node text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  fill: #e2e8f0;
+  pointer-events: none;
+}
+#graph-svg .link {
+  stroke: #334155;
+  stroke-width: 1.5;
+  fill: none;
+  marker-end: url(#arrow);
+}
+
+/* ================================================================
+   MISC UTILITIES
+   ================================================================ */
+
+/* Smooth page transitions */
+main { animation: fadeIn 0.15s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* Details summary arrow reset */
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }

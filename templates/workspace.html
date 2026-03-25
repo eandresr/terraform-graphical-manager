@@ -1,0 +1,858 @@
+{% extends "base.html" %}
+
+{% block title %}{{ workspace.name }} — Terraform Graphical Manager{% endblock %}
+
+{% block breadcrumb %}
+  <div class="flex items-center space-x-2 text-sm">
+    <a href="{{ url_for('workspace.dashboard') }}" class="text-gray-400 hover:text-gray-600">Dashboard</a>
+    <svg class="w-3 h-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+    </svg>
+    {% for part in workspace.parts[:-1] %}
+      <span class="text-gray-400">{{ part }}</span>
+      <svg class="w-3 h-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+      </svg>
+    {% endfor %}
+    <span class="text-gray-900 font-semibold">{{ workspace.name }}</span>
+  </div>
+{% endblock %}
+
+{% block content %}
+<div x-data="workspacePage('{{ workspace.id }}')" x-init="init()">
+
+  <!-- ================================================================
+       WORKSPACE HEADER
+       ================================================================ -->
+  <div class="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+    <div class="flex items-start justify-between">
+      <!-- Left: name + meta -->
+      <div>
+        <div class="flex items-center space-x-3 mb-2">
+          <h1 class="text-xl font-bold text-gray-900">{{ workspace.name }}</h1>
+
+          <!-- Providers -->
+          {% for p in workspace.providers %}
+            <span class="provider-badge provider-{{ p }}">{{ p }}</span>
+          {% endfor %}
+
+          <!-- Backend -->
+          {% if workspace.backend %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+              backend: {{ workspace.backend }}
+            </span>
+          {% endif %}
+
+          <!-- Drift indicator (loaded via JS) -->
+          <span id="drift-badge" class="hidden inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-300">
+            ⚠ DRIFT DETECTED
+          </span>
+
+          <!-- Lock indicator -->
+          <span id="lock-badge" class="hidden inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800 border border-red-300">
+            🔒 STATE LOCKED
+          </span>
+        </div>
+
+        <p class="text-gray-400 text-sm font-mono">{{ workspace.abs_path }}</p>
+
+        <!-- Git info -->
+        {% if workspace.has_git and workspace.git.branch %}
+          <div class="mt-3 flex items-center space-x-4 text-sm text-gray-500">
+            <div class="flex items-center space-x-1.5">
+              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+              </svg>
+              <span class="font-mono font-medium text-gray-700">{{ workspace.git.branch }}</span>
+            </div>
+            <span class="font-mono text-gray-400">{{ workspace.git.commit_hash }}</span>
+            <span class="text-gray-400 truncate max-w-sm">{{ workspace.git.commit_message }}</span>
+            <span class="text-gray-300">·</span>
+            <span class="text-gray-400">{{ workspace.git.commit_author }}</span>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Right: action buttons -->
+      <div class="flex items-center space-x-2 flex-shrink-0 ml-6">
+        {% if workspace.has_git %}
+        <button @click="gitPull()" :disabled="gitPulling"
+                class="btn-secondary text-sm">
+          <svg class="w-4 h-4 mr-1.5" :class="gitPulling ? 'animate-spin' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Pull latest
+        </button>
+        {% endif %}
+
+        <button @click="openPlanModal()"
+                class="btn-secondary text-sm">
+          <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 8l2 2 4-4"/>
+          </svg>
+          Plan
+        </button>
+
+        <button @click="openApplyModal()"
+                class="btn-primary text-sm">
+          <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          </svg>
+          Apply
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab nav -->
+    <div class="mt-5 border-t border-gray-100 pt-4">
+      <nav class="flex space-x-1">
+        {% for tab_id, tab_label in [('overview','Overview'),('output','Output'),('runs','Runs'),('state','State'),('plan','Plan Diff'),('graph','Graph')] %}
+          <button @click="switchTab('{{ tab_id }}')"
+                  :class="activeTab === '{{ tab_id }}' ? 'tab-active' : 'tab-inactive'"
+                  class="tab">
+            {{ tab_label }}
+          </button>
+        {% endfor %}
+      </nav>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       TAB: OVERVIEW
+       ================================================================ -->
+  <div x-show="activeTab === 'overview'" x-transition>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+      <!-- Last run card -->
+      <div class="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
+        <h3 class="font-semibold text-gray-900 mb-4">Latest Run</h3>
+        {% if runs %}
+          {% set latest = runs[0] %}
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="status-badge status-{{ latest.status.value }}">{{ latest.status.value }}</span>
+              <span class="ml-2 text-sm text-gray-600 font-medium">{{ latest.command }}</span>
+              <span class="ml-2 text-xs text-gray-400 font-mono">{{ latest.timestamp[:19] }}</span>
+            </div>
+            {% if latest.duration_seconds %}
+              <span class="text-xs text-gray-400">{{ latest.duration_seconds }}s</span>
+            {% endif %}
+          </div>
+        {% else %}
+          <p class="text-gray-400 text-sm">No runs yet. Click <strong>Plan</strong> to get started.</p>
+        {% endif %}
+      </div>
+
+      <!-- Info card -->
+      <div class="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 class="font-semibold text-gray-900 mb-4">Workspace Info</h3>
+        <dl class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <dt class="text-gray-500">Providers</dt>
+            <dd class="text-gray-900">{{ workspace.providers | join(', ') or '—' }}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-gray-500">Backend</dt>
+            <dd class="text-gray-900">{{ workspace.backend or 'local' }}</dd>
+          </div>
+          {% if workspace.has_git %}
+          <div class="flex justify-between">
+            <dt class="text-gray-500">Branch</dt>
+            <dd class="text-gray-900 font-mono">{{ workspace.git.branch or '—' }}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-gray-500">Last commit</dt>
+            <dd class="text-gray-900 font-mono">{{ workspace.git.commit_hash or '—' }}</dd>
+          </div>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <!-- Terraform Version selector -->
+    <div class="mt-5 bg-white rounded-xl border border-gray-200 p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-semibold text-gray-900">Terraform Version</h3>
+        <button @click="saveVersion()"
+                :disabled="savingVersion"
+                class="px-3 py-1.5 bg-tf-600 hover:bg-tf-700 text-white text-xs font-medium rounded-lg
+                       transition-colors disabled:opacity-60 disabled:cursor-wait">
+          <span x-text="savingVersion ? 'Saving…' : 'Save'"></span>
+        </button>
+      </div>
+
+      <div class="flex items-center space-x-4">
+        <select x-model="pinnedVersion"
+                class="w-72 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white
+                       focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent">
+          <option value="system" x-text="systemVersion ? systemVersion + ' (System Default)' : 'System Default'"></option>
+          <template x-for="v in versionList" :key="v.version">
+            <option :value="v.version" x-text="v.version"></option>
+          </template>
+        </select>
+
+        <div x-show="versionList.length === 0 && versionsFolder === ''" class="text-xs text-gray-400">
+          Configure a versions folder in
+          <a href="/settings" class="text-tf-500 hover:underline">Settings</a>
+          to enable version pinning.
+        </div>
+        <div x-show="versionList.length === 0 && versionsFolder !== ''" class="text-xs text-amber-600">
+          No versions detected in the configured folder.
+        </div>
+      </div>
+
+      <p class="mt-2 text-xs text-gray-400">
+        This version will be used for all Terraform commands in this workspace.
+        "System default" uses the binary found on PATH.
+      </p>
+    </div>
+
+  </div>
+
+  <!-- ================================================================
+       TAB: OUTPUT
+       ================================================================ -->
+  <div x-show="activeTab === 'output'" x-transition>
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="font-semibold text-gray-900">Terraform Outputs</h3>
+        <button @click="loadOutput()"
+                :disabled="outputLoading"
+                class="btn-secondary text-sm" :class="outputLoading ? 'opacity-60 cursor-wait' : ''">
+          <svg class="w-4 h-4 mr-1.5" :class="outputLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+
+      <div x-show="outputError" class="mx-6 my-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700" x-text="outputError"></div>
+
+      <template x-if="outputData && Object.keys(outputData).length > 0">
+        <div class="divide-y divide-gray-50">
+          <template x-for="[key, val] in Object.entries(outputData)" :key="key">
+            <div x-data="{ expanded: false }" class="px-6 py-4 hover:bg-gray-50">
+              <div class="flex items-center justify-between cursor-pointer" @click="expanded = !expanded">
+                <div class="flex items-center space-x-3">
+                  <svg class="w-3.5 h-3.5 text-gray-400 transition-transform" :class="expanded ? 'rotate-90' : ''" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                  </svg>
+                  <span class="font-mono font-semibold text-sm text-gray-900" x-text="key"></span>
+                  <span x-show="val.sensitive" class="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">sensitive</span>
+                  <span class="text-xs text-gray-400" x-text="val.type ? (typeof val.type === 'string' ? val.type : JSON.stringify(val.type)) : ''"></span>
+                </div>
+                <span class="font-mono text-sm text-gray-500 truncate max-w-xs" x-text="val.sensitive ? '***' : (typeof val.value === 'object' ? JSON.stringify(val.value) : String(val.value))"></span>
+              </div>
+              <div x-show="expanded && !val.sensitive" x-transition class="mt-3 ml-6">
+                <div class="bg-gray-950 rounded-lg p-4 font-mono text-xs text-green-300 overflow-x-auto">
+                  <pre x-text="typeof val.value === 'object' ? JSON.stringify(val.value, null, 2) : String(val.value)"></pre>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <div x-show="outputData && Object.keys(outputData).length === 0 && !outputLoading && !outputError" class="py-12 text-center">
+        <p class="text-gray-400 text-sm">No outputs defined in this workspace.</p>
+      </div>
+      <div x-show="!outputData && !outputLoading && !outputError" class="py-12 text-center">
+        <p class="text-gray-400 text-sm">Click <strong>Refresh</strong> to load current outputs.</p>
+      </div>
+      <div x-show="outputLoading" class="py-12 text-center">
+        <div class="inline-block w-6 h-6 border-2 border-tf-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       TAB: RUNS
+       ================================================================ -->
+  <div x-show="activeTab === 'runs'" x-transition>
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="font-semibold text-gray-900">Run History</h3>
+        <div class="flex items-center space-x-3">
+          <span class="text-xs text-gray-400" x-show="runList.length" x-text="runList.length + ' total'"></span>
+          <button @click="loadRuns()" :disabled="runsLoading" title="Refresh"
+                  class="text-gray-400 hover:text-gray-600" :class="runsLoading ? 'opacity-50 cursor-wait' : ''">
+            <svg class="w-3.5 h-3.5" :class="runsLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Loading spinner (first load) -->
+      <div x-show="runsLoading && !runList.length" class="py-8 text-center">
+        <div class="inline-flex items-center text-sm text-gray-400">
+          <svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+          </svg>
+          Loading runs…
+        </div>
+      </div>
+
+      <!-- Run list (lazy-loaded) -->
+      <div x-show="runList.length" class="divide-y divide-gray-50">
+        <template x-for="run in runList" :key="run.id">
+          <div class="px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer"
+               @click="selectRun(run.id)">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="status-badge" :class="`status-${run.status}`" x-text="run.status"></span>
+                <span class="font-medium text-sm text-gray-900 capitalize" x-text="run.command"></span>
+                <span class="text-xs text-gray-400 font-mono" x-text="(run.timestamp || '').slice(0, 19)"></span>
+                <template x-if="run.providers && run.providers.length">
+                  <div class="flex space-x-1">
+                    <template x-for="p in run.providers" :key="p">
+                      <span class="provider-badge" :class="`provider-${p}`" x-text="p.slice(0,2).toUpperCase()"></span>
+                    </template>
+                  </div>
+                </template>
+              </div>
+              <div class="flex items-center space-x-3">
+                <template x-if="run.duration_seconds">
+                  <span class="text-xs text-gray-400" x-text="`${run.duration_seconds}s`"></span>
+                </template>
+                <template x-if="run.status === 'running' || run.status === 'queued'">
+                  <button @click.stop="cancelRun(run.id)"
+                          class="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-0.5 rounded border border-red-200 hover:bg-red-50">
+                    Cancel
+                  </button>
+                </template>
+                <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Empty state -->
+      <div x-show="!runsLoading && runsLoaded && !runList.length" class="py-12 text-center">
+        <p class="text-gray-400 text-sm">No runs yet.</p>
+      </div>
+    </div>
+
+    <!-- Expanded run detail panel -->
+    <div x-show="selectedRunId" x-transition class="mt-5 bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="font-semibold text-gray-900">Run Logs</h3>
+        <button @click="selectedRunId = null" class="text-gray-400 hover:text-gray-600">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div id="log-output"
+           class="bg-gray-950 text-green-400 font-mono text-xs p-4 h-80 overflow-y-auto whitespace-pre-wrap">
+        <template x-for="(line, idx) in runLogs" :key="idx">
+          <div x-text="line" class="leading-5"></div>
+        </template>
+        <div x-show="!runLogs.length" class="text-gray-600">Waiting for logs...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       TAB: STATE
+       ================================================================ -->
+  <div x-show="activeTab === 'state'" x-transition>
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="font-semibold text-gray-900">Terraform State</h3>
+        <button @click="loadState()"
+                :disabled="stateLoading"
+                class="btn-secondary text-sm" :class="stateLoading ? 'opacity-60 cursor-wait' : ''">
+          <svg class="w-4 h-4 mr-1.5" :class="stateLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+
+      <template x-if="stateData">
+        <div>
+          <!-- State summary -->
+          <div class="px-6 py-4 bg-gray-50 border-b border-gray-100 flex items-center space-x-6 text-sm">
+            <div>
+              <span class="text-gray-500">Resources: </span>
+              <span class="font-semibold text-gray-900" x-text="stateData.resource_count"></span>
+            </div>
+            <div>
+              <span class="text-gray-500">Serial: </span>
+              <span class="font-mono text-gray-700" x-text="stateData.serial"></span>
+            </div>
+            <div>
+              <span class="text-gray-500">Terraform: </span>
+              <span class="font-mono text-gray-700" x-text="stateData.terraform_version"></span>
+            </div>
+          </div>
+
+          <!-- Resource list -->
+          <div class="divide-y divide-gray-50">
+            <template x-for="res in stateData.resources" :key="res.address">
+              <div x-data="{ expanded: false }" class="px-6 py-3 hover:bg-gray-50">
+                <div class="flex items-center justify-between cursor-pointer" @click="expanded = !expanded">
+                  <div class="flex items-center space-x-3">
+                    <svg class="w-3.5 h-3.5 text-gray-400 transition-transform" :class="expanded ? 'rotate-90' : ''" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                    <span class="font-mono text-sm text-gray-900" x-text="res.address"></span>
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono" x-text="res.mode"></span>
+                  </div>
+                  <span class="text-xs text-gray-400" x-text="res.provider"></span>
+                </div>
+
+                <!-- Expanded attributes -->
+                <div x-show="expanded" x-transition class="mt-3 ml-6">
+                  <template x-for="inst in res.instances" :key="inst.index_key">
+                    <div class="bg-gray-950 rounded-lg p-4 font-mono text-xs text-gray-300 overflow-x-auto">
+                      <pre x-text="JSON.stringify(inst.attributes, null, 2)"></pre>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <div x-show="!stateData && !stateLoading" class="py-12 text-center">
+        <p class="text-gray-400 text-sm">Click <strong>Refresh</strong> to load current state.</p>
+      </div>
+      <div x-show="stateLoading" class="py-12 text-center">
+        <div class="inline-block w-6 h-6 border-2 border-tf-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       TAB: PLAN DIFF
+       ================================================================ -->
+  <div x-show="activeTab === 'plan'" x-transition>
+    <div x-show="!planSummary" class="bg-white rounded-xl border border-gray-200 py-12 text-center">
+      <p class="text-gray-400 text-sm">Run a <strong>Plan</strong> first to see the diff here.</p>
+    </div>
+
+    <template x-if="planSummary">
+      <div class="space-y-5">
+        <!-- Plan summary bar -->
+        <div class="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 class="font-semibold text-gray-900 mb-4">Plan Summary</h3>
+          <div class="flex items-center space-x-6">
+            <div class="flex items-center space-x-2">
+              <span class="w-2 h-2 rounded-full bg-green-500"></span>
+              <span class="text-sm"><span class="font-bold text-green-700" x-text="planSummary.counts.create"></span> to create</span>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+              <span class="text-sm"><span class="font-bold text-yellow-700" x-text="planSummary.counts.update"></span> to update</span>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="w-2 h-2 rounded-full bg-red-500"></span>
+              <span class="text-sm"><span class="font-bold text-red-700" x-text="planSummary.counts.delete"></span> to destroy</span>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="w-2 h-2 rounded-full bg-red-600"></span>
+              <span class="text-sm"><span class="font-bold text-red-700" x-text="planSummary.counts.replace"></span> to replace</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resource changes -->
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div class="px-6 py-4 border-b border-gray-100">
+            <h3 class="font-semibold text-gray-900">Resource Changes</h3>
+          </div>
+          <div class="divide-y divide-gray-50">
+            <template x-for="change in planSummary.changes" :key="change.address">
+              <div x-data="{ expanded: false }">
+                <div class="px-6 py-3 flex items-center space-x-3 cursor-pointer hover:bg-gray-50"
+                     @click="expanded = !expanded">
+                  <!-- Action symbol -->
+                  <span class="font-mono font-bold text-sm w-6 text-center flex-shrink-0"
+                        :class="{
+                          'text-green-600': change.action === 'create',
+                          'text-yellow-600': change.action === 'update',
+                          'text-red-600': change.action === 'delete' || change.action === 'replace',
+                          'text-gray-400': change.action === 'no-op',
+                        }"
+                        x-text="change.symbol"></span>
+
+                  <!-- Address -->
+                  <span class="font-mono text-sm text-gray-900 flex-1 truncate" x-text="change.address"></span>
+
+                  <!-- Action label -->
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium"
+                        :class="{
+                          'bg-green-100 text-green-800': change.action === 'create',
+                          'bg-yellow-100 text-yellow-800': change.action === 'update',
+                          'bg-red-100 text-red-800': change.action === 'delete' || change.action === 'replace',
+                          'bg-gray-100 text-gray-600': change.action === 'no-op',
+                        }"
+                        x-text="change.label"></span>
+
+                  <svg class="w-3.5 h-3.5 text-gray-300 transition-transform" :class="expanded ? 'rotate-90' : ''" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                  </svg>
+                </div>
+
+                <!-- Diff lines -->
+                <div x-show="expanded" x-transition class="px-6 pb-4">
+                  <div class="bg-gray-950 rounded-lg overflow-x-auto font-mono text-xs text-gray-100">
+                    <template x-for="dl in change.diff_lines" :key="dl.key">
+                      <div class="flex items-start px-4 py-0.5"
+                           :class="{
+                             'bg-green-950/50 text-green-300': dl.type === 'add',
+                             'bg-red-950/50 text-red-300': dl.type === 'remove',
+                             'bg-yellow-950/30 text-yellow-200': dl.type === 'change',
+                           }">
+                        <span class="w-4 flex-shrink-0 mr-2 font-bold"
+                              x-text="dl.type === 'add' ? '+' : (dl.type === 'remove' ? '-' : '~')"></span>
+                        <span class="text-gray-300 mr-2" x-text="dl.key + ':'"></span>
+                        <template x-if="dl.type === 'change'">
+                          <span>
+                            <span class="line-through text-red-400 mr-2" x-text="dl.before"></span>
+                            <span class="text-green-400" x-text="dl.after"></span>
+                          </span>
+                        </template>
+                        <template x-if="dl.type === 'add'">
+                          <span class="text-green-300" x-text="dl.after"></span>
+                        </template>
+                        <template x-if="dl.type === 'remove'">
+                          <span class="text-red-300" x-text="dl.before"></span>
+                        </template>
+                      </div>
+                    </template>
+                    <div x-show="!change.diff_lines.length" class="px-4 py-2 text-gray-400">No attribute changes.</div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- ================================================================
+       TAB: GRAPH
+       ================================================================ -->
+  <div x-show="activeTab === 'graph'" x-transition>
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="font-semibold text-gray-900">Dependency Graph</h3>
+        <button @click="loadGraph()"
+                :disabled="graphLoading"
+                class="btn-secondary text-sm">
+          <svg class="w-4 h-4 mr-1.5" :class="graphLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Generate
+        </button>
+      </div>
+      <div id="graph-container" class="w-full" style="height: 600px; background: #0f172a;">
+        <div x-show="!graphData && !graphLoading" class="flex h-full items-center justify-center">
+          <p class="text-gray-500 text-sm">Click <strong class="text-gray-400">Generate</strong> to build the dependency graph.</p>
+        </div>
+        <div x-show="graphLoading" class="flex h-full items-center justify-center">
+          <div class="inline-block w-8 h-8 border-2 border-tf-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       EXECUTION MODAL (Plan / Apply)
+       ================================================================ -->
+  {% include "execution_modal.html" %}
+
+</div><!-- /x-data workspacePage -->
+
+{% endblock %}
+
+{% block scripts %}
+<!-- D3.js for graph -->
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="{{ url_for('static', filename='js/graph.js') }}"></script>
+
+<script>
+const WORKSPACE_ID = '{{ workspace.id }}';
+const CRED_STATUS = {{ cred_status | tojson }};
+const PROVIDERS = {{ workspace.providers | tojson }};
+
+function workspacePage(workspaceId) {
+  return {
+    activeTab: '{{ active_tab }}',
+    // Run tracking
+    runList: [],
+    runsLoaded: false,
+    runsLoading: false,
+    selectedRunId: null,
+    runLogs: [],
+    gitPulling: false,
+    // Output
+    outputData: null,
+    outputLoading: false,
+    outputError: null,
+    // Version management
+    versionList: [],
+    pinnedVersion: 'system',
+    savingVersion: false,
+    systemVersion: null,
+    versionsFolder: '',
+    // State
+    stateData: null,
+    stateLoading: false,
+    // Plan
+    planSummary: null,
+    latestPlanExecId: null,
+    // Graph
+    graphData: null,
+    graphLoading: false,
+    // Modal
+    modalOpen: false,
+    modalCommand: 'plan',
+    modalEnvVars: {},
+    modalSubmitting: false,
+    modalVersion: 'system',
+    applyConfirmed: false,
+
+    async init() {
+      this.setupSocket();
+      this.loadVersions();
+      if (this.activeTab === 'runs') this.loadRuns();
+    },
+
+    switchTab(tab) {
+      this.activeTab = tab;
+      if (tab === 'output') this.loadOutput();
+      if (tab === 'state')  this.loadState();
+      if (tab === 'graph')  this.loadGraph();
+      if (tab === 'runs' && !this.runsLoaded) this.loadRuns();
+    },
+
+    setupSocket() {
+      // Reuse the global socket created by main.js (getSocket)
+      const socket = window.TGM ? window.TGM.getSocket() : io({ transports: ['polling'] });
+      socket.on('execution_log', (data) => {
+        if (data.execution_id === this.selectedRunId) {
+          this.runLogs.push(data.line);
+          this.$nextTick(() => {
+            const el = document.getElementById('log-output');
+            if (el) el.scrollTop = el.scrollHeight;
+          });
+        }
+      });
+      socket.on('execution_status', (data) => {
+        // Update status badge in the run list if the run is already visible
+        const idx = this.runList.findIndex(r => r.id === data.execution_id);
+        if (idx !== -1) {
+          this.runList[idx] = { ...this.runList[idx], status: data.status };
+        }
+        // If the selected run just finished, do a final log fetch to get all lines
+        if (data.execution_id === this.selectedRunId &&
+            (data.status === 'completed' || data.status === 'failed')) {
+          this.loadRunLogs(data.execution_id);
+        }
+      });
+    },
+
+    selectRun(runId) {
+      this.selectedRunId = runId;
+      this.runLogs = [];
+      this.activeTab = 'runs';
+      this.loadRunLogs(runId);
+    },
+
+    async loadRunLogs(runId) {
+      const res = await fetch(`/api/executions/${runId}/logs`);
+      const data = await res.json();
+      this.runLogs = data.lines || [];
+      this.$nextTick(() => {
+        const el = document.getElementById('log-output');
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    },
+
+    async cancelRun(runId) {
+      await fetch(`/api/executions/${runId}/cancel`, { method: 'POST' });
+    },
+
+    async loadRuns() {
+      if (this.runsLoading) return;
+      this.runsLoading = true;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/executions`);
+        const data = await res.json();
+        this.runList = data;
+        this.runsLoaded = true;
+      } catch (e) {
+        // non-critical
+      } finally {
+        this.runsLoading = false;
+      }
+    },
+
+    async gitPull() {
+      this.gitPulling = true;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/git-pull`, { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          window.location.reload();
+        } else {
+          alert('git pull failed:\n' + (data.output || data.error));
+        }
+      } finally {
+        this.gitPulling = false;
+      }
+    },
+
+    async loadVersions() {
+      try {
+        const res = await fetch(`/api/versions`);
+        const data = await res.json();
+        this.versionList = data.available || [];
+        this.systemVersion = data.system_version || null;
+        this.versionsFolder = data.versions_folder || '';
+        // Load pinned version for this workspace
+        const vRes = await fetch(`/api/workspace/${workspaceId}/version`);
+        const vData = await vRes.json();
+        this.pinnedVersion = vData.pinned_version || 'system';
+        this.modalVersion = this.pinnedVersion;
+      } catch (e) {
+        // non-critical, swallow
+      }
+    },
+
+    async saveVersion() {
+      this.savingVersion = true;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/version`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version: this.pinnedVersion }),
+        });
+        const data = await res.json();
+        if (!data.ok) console.error('Failed to save version:', data.error);
+      } catch (e) {
+        console.error('saveVersion error:', e);
+      } finally {
+        this.savingVersion = false;
+      }
+    },
+
+    async loadOutput() {
+      this.outputLoading = true;
+      this.outputError = null;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/output`);
+        const data = await res.json();
+        if (!res.ok) {
+          this.outputError = data.error || 'Failed to load outputs';
+        } else {
+          this.outputData = data;
+        }
+      } catch (e) {
+        this.outputError = e.message;
+      } finally {
+        this.outputLoading = false;
+      }
+    },
+
+    async loadState() {
+      this.stateLoading = true;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/state`);
+        const data = await res.json();
+        this.stateData = data;
+      } finally {
+        this.stateLoading = false;
+      }
+    },
+
+    async loadGraph() {
+      this.graphLoading = true;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/graph`);
+        const data = await res.json();
+        this.graphData = data;
+        this.$nextTick(() => {
+          if (window.TGMGraph) {
+            window.TGMGraph.render('graph-container', data);
+          }
+        });
+      } finally {
+        this.graphLoading = false;
+      }
+    },
+
+    openPlanModal() {
+      this.modalCommand = 'plan';
+      this.modalVersion = this.pinnedVersion;
+      this.modalOpen = true;
+    },
+
+    openApplyModal() {
+      this.modalCommand = 'apply';
+      this.modalVersion = this.pinnedVersion;
+      this.applyConfirmed = false;
+      this.modalOpen = true;
+    },
+
+    async submitRun() {
+      this.modalSubmitting = true;
+      try {
+        const body = {
+          command: this.modalCommand,
+          env_vars: this.modalEnvVars,
+          terraform_version_override: this.modalVersion,
+        };
+        if (this.modalCommand === 'apply' && this.latestPlanExecId) {
+          body.plan_execution_id = this.latestPlanExecId;
+        }
+        const res = await fetch(`/api/workspace/${workspaceId}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (data.execution_id) {
+          this.latestPlanExecId = data.execution_id;
+          this.modalOpen = false;
+          this.activeTab = 'runs';
+          this.selectRun(data.execution_id);
+          this.loadRuns();
+          this.pollExecutionPlan(data.execution_id);
+        }
+      } finally {
+        this.modalSubmitting = false;
+      }
+    },
+
+    async pollExecutionPlan(execId) {
+      // Poll until plan is ready, then populate plan tab
+      const interval = setInterval(async () => {
+        const res = await fetch(`/api/executions/${execId}`);
+        const data = await res.json();
+        if (data.status === 'completed' || data.status === 'failed') {
+          clearInterval(interval);
+          if (data.status === 'completed') {
+            const planRes = await fetch(`/api/executions/${execId}/plan`);
+            if (planRes.ok) {
+              this.planSummary = await planRes.json();
+            }
+          }
+        }
+      }, 2000);
+    },
+  };
+}
+</script>
+{% endblock %}

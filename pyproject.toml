@@ -1,0 +1,108 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# ---------------------------------------------------------------------------
+# Project metadata
+# ---------------------------------------------------------------------------
+
+[project]
+name = "terraform-graphical-manager"
+version = "0.1.0"
+description = "A local, open-source Terraform Cloud-like UI for your own machines."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Eduardo Andres Rabano" }
+]
+keywords = ["terraform", "infrastructure", "devops", "dashboard", "ui"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: Flask",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Utilities",
+]
+requires-python = ">=3.9"
+
+dependencies = [
+    "Flask==3.0.3",
+    "Flask-SocketIO==5.3.6",
+    "python-engineio==4.9.1",
+    "python-socketio==5.11.2",
+    "Jinja2==3.1.4",
+    "gitpython==3.1.43",
+    "boto3==1.34.69",
+    "google-cloud-storage==2.16.0",
+    "azure-storage-blob==12.19.1",
+    "python-dotenv==1.0.1",
+    "python-hcl2==4.3.2",
+    "requests==2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pycodestyle>=2.11",
+    "flake8>=7.0",
+    "pip-audit>=2.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/eandresr/terraform-graphical-manager"
+Repository = "https://github.com/eandresr/terraform-graphical-manager.git"
+"Bug Tracker" = "https://github.com/eandresr/terraform-graphical-manager/issues"
+
+[project.scripts]
+tgm = "app.cli:main"
+
+# ---------------------------------------------------------------------------
+# setuptools — package discovery
+# ---------------------------------------------------------------------------
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+# ---------------------------------------------------------------------------
+# pycodestyle
+# ---------------------------------------------------------------------------
+
+[tool.pycodestyle]
+max-line-length = 99
+exclude = [
+    ".git",
+    "venv",
+    ".venv",
+    "build",
+    "dist",
+    "__pycache__",
+]
+
+# ---------------------------------------------------------------------------
+# flake8  (via .flake8 is the canonical place, but tox/flake8 also reads
+#           the [tool.flake8] table when using flake8 >=6 with a plugin)
+# ---------------------------------------------------------------------------
+
+[tool.flake8]
+max-line-length = 99
+extend-ignore = [
+    "E203",  # whitespace before ':' (conflicts with black-style slices)
+    "W503",  # line break before binary operator (PEP 8 updated opinion)
+]
+exclude = [
+    ".git",
+    "venv",
+    ".venv",
+    "build",
+    "dist",
+    "__pycache__",
+]

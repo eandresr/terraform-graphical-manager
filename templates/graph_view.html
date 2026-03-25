@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Graph — {{ workspace.name }} — Terraform Graphical Manager{% endblock %}
+
+{% block head %}
+<script src="https://d3js.org/d3.v7.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div x-data="graphView('{{ workspace.id }}')" class="space-y-4">
+
+  <!-- Header -->
+  <div class="bg-white rounded-xl border border-gray-200 p-5 flex items-center justify-between">
+    <div>
+      <h2 class="font-bold text-gray-900 text-lg">Dependency Graph</h2>
+      <p class="text-xs text-gray-400 mt-1">Generated from <code class="text-gray-500">terraform graph</code></p>
+    </div>
+    <div class="flex items-center space-x-2">
+      <button @click="resetZoom()" class="btn-secondary text-sm">Reset zoom</button>
+      <button @click="loadGraph()" :disabled="loading" class="btn-primary text-sm">
+        <svg class="w-4 h-4 mr-1.5" :class="loading ? 'animate-spin' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        Generate
+      </button>
+    </div>
+  </div>
+
+  <!-- Node tooltip -->
+  <div id="graph-tooltip"
+       class="hidden fixed z-50 bg-gray-900 text-white text-xs font-mono rounded-lg shadow-xl px-3 py-2 pointer-events-none max-w-xs">
+  </div>
+
+  <!-- Graph canvas -->
+  <div class="bg-gray-950 rounded-xl border border-gray-800 overflow-hidden" style="height: 640px;">
+    <div x-show="!graphData && !loading" class="h-full flex items-center justify-center">
+      <div class="text-center">
+        <svg class="mx-auto w-14 h-14 text-gray-700 mb-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z"/>
+        </svg>
+        <p class="text-gray-500 text-sm">Click <span class="text-gray-300 font-semibold">Generate</span> to render</p>
+      </div>
+    </div>
+    <div x-show="loading" class="h-full flex items-center justify-center">
+      <div class="text-center space-y-3">
+        <div class="w-8 h-8 mx-auto border-2 border-tf-500 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-gray-500 text-sm">Running <code class="text-gray-400">terraform graph</code>…</p>
+      </div>
+    </div>
+    <svg id="graph-svg" class="w-full h-full" x-show="graphData && !loading"></svg>
+  </div>
+
+  <!-- Legend -->
+  <div x-show="graphData" class="bg-white rounded-xl border border-gray-200 px-5 py-4">
+    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Legend</h4>
+    <div class="flex flex-wrap gap-4 text-xs text-gray-600">
+      <div class="flex items-center space-x-2">
+        <span class="w-3 h-3 rounded-full bg-tf-500 inline-block"></span>
+        <span>Resource</span>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="w-3 h-3 rounded-full bg-blue-500 inline-block"></span>
+        <span>Data source</span>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="w-3 h-3 rounded-full bg-gray-400 inline-block"></span>
+        <span>Meta / variable</span>
+      </div>
+      <div class="flex items-center space-x-1.5 ml-4">
+        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+        </svg>
+        <span>Scroll to zoom · Drag to pan · Click node for details</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/graph.js') }}"></script>
+<script>
+function graphView(workspaceId) {
+  return {
+    loading: false,
+    graphData: null,
+
+    async loadGraph() {
+      this.loading = true;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/graph`);
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || 'Failed to generate graph.');
+          return;
+        }
+        this.graphData = data;
+        this.$nextTick(() => {
+          if (window.TGMGraph) {
+            window.TGMGraph.render('graph-svg', data);
+          }
+        });
+      } catch(e) {
+        alert('Network error: ' + e.message);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    resetZoom() {
+      if (window.TGMGraph) window.TGMGraph.resetZoom('graph-svg');
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" class="h-full bg-gray-950">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login — {{ site_name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            tf: { 400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="h-full flex items-center justify-center">
+
+  <div class="w-full max-w-sm px-6">
+    <!-- Logo / brand -->
+    <div class="mb-8 text-center">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-tf-600 mb-4">
+        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/>
+        </svg>
+      </div>
+      <h1 class="text-xl font-semibold text-white">{{ site_name }}</h1>
+      <p class="mt-1 text-sm text-gray-400">Enter your portal password to continue.</p>
+    </div>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="mb-4 px-4 py-3 rounded-lg text-sm
+                    {% if category == 'error' %}bg-red-900/60 text-red-300 border border-red-700
+                    {% else %}bg-green-900/60 text-green-300 border border-green-700{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endwith %}
+
+    <!-- Login card -->
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-xl p-8">
+      <form method="POST" action="{{ url_for('auth.login_post') }}" class="space-y-5">
+        <input type="hidden" name="next_url" value="{{ next_url }}">
+
+        <div>
+          <label for="password" class="block text-sm font-medium text-gray-300 mb-1.5">
+            Password
+          </label>
+          <input id="password" name="password" type="password" required autofocus
+                 class="w-full px-3 py-2.5 bg-gray-800 border border-gray-600 rounded-lg
+                        text-white text-sm placeholder-gray-500
+                        focus:outline-none focus:ring-2 focus:ring-tf-500 focus:border-transparent">
+        </div>
+
+        <button type="submit"
+                class="w-full py-2.5 bg-tf-600 hover:bg-tf-700 text-white text-sm font-medium
+                       rounded-lg transition-colors shadow-sm">
+          Unlock portal
+        </button>
+      </form>
+    </div>
+
+    <p class="mt-6 text-center text-xs text-gray-600">
+      Terraform Graphical Manager
+    </p>
+  </div>
+
+</body>
+</html>

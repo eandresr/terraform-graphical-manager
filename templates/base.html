@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en" x-data="{ mobileMenuOpen: false }">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}{{ site_name }}{% endblock %}</title>
+
+  <!-- TailwindCSS Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            tf: {
+              50:  '#f0effe',
+              100: '#e4e1fc',
+              200: '#ccc6fa',
+              300: '#aa9ef5',
+              400: '#856eef',
+              500: '#5c4ee5',
+              600: '#4832da',
+              700: '#3d27c3',
+              800: '#3422a0',
+              900: '#2d1f82',
+            },
+          },
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+          },
+        },
+      },
+    }
+  </script>
+
+  <!-- Inter font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- Alpine.js -->
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <!-- Socket.IO -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/icon.png') }}" />
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+
+  {% block head %}{% endblock %}
+</head>
+
+<body class="bg-gray-50 font-sans text-gray-900 antialiased">
+
+<!-- ============================================================
+     LAYOUT: sidebar + main
+     ============================================================ -->
+<div class="flex h-screen overflow-hidden">
+
+  <!-- ---- SIDEBAR -------------------------------------------------- -->
+  <aside id="sidebar" class="flex-shrink-0 w-64 bg-gray-900 flex flex-col h-full overflow-y-auto">
+
+    <!-- Logo / Brand -->
+    <a href="{{ url_for('workspace.dashboard') }}" class="px-4 py-5 border-b border-gray-700/60 flex items-center space-x-3 hover:bg-gray-800/60 transition-colors">
+      <div class="w-9 h-9 flex-shrink-0">
+        <img src="{{ url_for('static', filename='img/icon.png') }}" alt="TFG" class="w-9 h-9 object-contain" />
+      </div>
+      <div>
+        {% set _parts = site_name.split(' ', 1) %}
+        <p class="text-white font-semibold text-sm leading-tight">{{ _parts[0] }}</p>
+        {% if _parts|length > 1 %}<p class="text-gray-400 text-xs">{{ _parts[1] }}</p>{% endif %}
+      </div>
+    </a>
+
+    <!-- Repos root info -->
+    <div class="px-4 py-3 border-b border-gray-700/60">
+      <p class="text-gray-500 text-xs uppercase tracking-wider font-medium mb-1">Repos Root</p>
+      <p class="text-gray-300 text-xs font-mono truncate" title="{{ repos_root }}">{{ repos_root }}</p>
+    </div>
+
+    <!-- Workspace tree -->
+    <nav class="flex-1 px-2 py-3 overflow-y-auto" x-data="sidebarTree()">
+      <p class="px-2 mb-2 text-gray-500 text-xs uppercase tracking-wider font-medium">Workspaces</p>
+
+      {% if workspace_tree %}
+        {% macro render_tree(tree, depth) %}
+          {% for key, node in tree.items() %}
+            <div style="padding-left: {{ depth * 12 }}px">
+              {% if node.workspace %}
+                {# Leaf — actual workspace #}
+                <a href="{{ url_for('workspace.workspace_detail', workspace_id=node.workspace.id) }}"
+                   class="sidebar-item group flex items-center space-x-2 px-2 py-1.5 rounded-md text-sm
+                          {% if request.view_args and request.view_args.get('workspace_id') == node.workspace.id %}
+                            bg-tf-600/30 text-tf-300 font-medium
+                          {% else %}
+                            text-gray-400 hover:text-white hover:bg-gray-800
+                          {% endif %}">
+                  <svg class="w-3.5 h-3.5 flex-shrink-0 text-gray-600 group-hover:text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                  </svg>
+                  <span class="truncate">{{ key }}</span>
+                  {% if node.workspace.providers %}
+                    <div class="flex space-x-1 ml-auto">
+                      {% for p in node.workspace.providers %}
+                        <span class="provider-badge provider-{{ p }}">{{ p[:2].upper() }}</span>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </a>
+              {% else %}
+                {# Folder node #}
+                <div x-data="{ open: true }"
+                     class="text-gray-400">
+                  <button @click="open = !open"
+                          class="w-full flex items-center space-x-1.5 px-2 py-1.5 rounded-md text-sm
+                                 hover:text-white hover:bg-gray-800 transition-colors">
+                    <svg class="w-3 h-3 flex-shrink-0 transition-transform" :class="open ? 'rotate-90' : ''" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                    <svg class="w-3.5 h-3.5 flex-shrink-0 text-yellow-600/70" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                    </svg>
+                    <span class="font-medium text-xs uppercase tracking-wide truncate">{{ key }}</span>
+                  </button>
+                  <div x-show="open" x-transition>
+                    {{ render_tree(node.children, depth + 1) }}
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        {% endmacro %}
+        {{ render_tree(workspace_tree, 0) }}
+      {% else %}
+        <div class="px-2 py-4 text-center">
+          <p class="text-gray-500 text-xs">No workspaces found.</p>
+          <p class="text-gray-600 text-xs mt-1">Check your <code class="text-gray-400">repos_root</code> in tfg.conf.</p>
+        </div>
+      {% endif %}
+    </nav>
+
+    <!-- Bottom nav -->
+    <div class="border-t border-gray-700/60 px-3 py-3 flex items-center space-x-2">
+      <a href="{{ url_for('workspace.dashboard') }}"
+         class="flex items-center space-x-2 text-gray-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-gray-800 transition-colors w-full">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+        </svg>
+        <span>Dashboard</span>
+      </a>
+      <a href="{{ url_for('settings.settings_page') }}"
+         class="flex items-center space-x-2 text-gray-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-gray-800 transition-colors w-full
+                {% if request.endpoint == 'settings.settings_page' %}text-white bg-gray-800{% endif %}">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        <span>Settings</span>
+      </a>
+    </div>
+
+    {% if config.lock_password_hash %}
+    <!-- Logout button (portal is locked) -->
+    <div class="border-t border-gray-700/60 px-3 py-2">
+      <a href="{{ url_for('auth.logout') }}"
+         class="flex items-center space-x-2 text-gray-500 hover:text-red-400 text-xs px-2 py-1 rounded hover:bg-gray-800 transition-colors w-full">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        </svg>
+        <span>Lock &amp; logout</span>
+      </a>
+    </div>
+    {% endif %}
+  </aside>
+  <!-- ---- /SIDEBAR -------------------------------------------------- -->
+
+  <!-- ---- MAIN CONTENT ---------------------------------------------- -->
+  <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+    <!-- Top bar -->
+    <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
+      <div class="flex items-center space-x-3">
+        {% block breadcrumb %}
+          <span class="text-gray-400 text-sm">Dashboard</span>
+        {% endblock %}
+      </div>
+      <div class="flex items-center space-x-4">
+        <!-- Execution queue badge -->
+        <div id="queue-badge" class="hidden items-center space-x-1.5 bg-tf-50 border border-tf-200 rounded-full px-3 py-1">
+          <span class="w-2 h-2 rounded-full bg-tf-500 animate-pulse"></span>
+          <span class="text-tf-700 text-xs font-medium" id="queue-count">0 running</span>
+        </div>
+        <!-- GitHub link -->
+        {% if repo_url %}
+        <a href="{{ repo_url }}"
+           target="_blank" rel="noopener noreferrer"
+           class="flex items-center space-x-1.5 text-gray-500 hover:text-gray-900 transition-colors group"
+           title="View on GitHub">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2C6.477 2 2 6.484 2 12.021c0 4.428 2.865 8.184 6.839 9.504.5.092.682-.217.682-.482
+                     0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462
+                     -.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832
+                     .092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688
+                     -.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844a9.59 9.59 0
+                     012.504.338c1.909-1.296 2.747-1.026 2.747-1.026.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595
+                     1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012
+                     2.747 0 .268.18.58.688.482A10.02 10.02 0 0022 12.021C22 6.484 17.522 2 12 2z"/>
+          </svg>
+          <span class="text-xs font-medium">{{ repo_url | replace('https://github.com/', '') | replace('https://', '') | truncate(40, True, '…') }}</span>
+        </a>
+        {% endif %}
+      </div>
+    </header>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="px-6 pt-4 space-y-2">
+          {% for category, message in messages %}
+            <div class="flex items-center space-x-2 px-4 py-3 rounded-lg text-sm
+                        {% if category == 'error' %}bg-red-50 text-red-700 border border-red-200
+                        {% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">
+              <span>{{ message }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <!-- Page content -->
+    <main class="flex-1 overflow-y-auto p-6">
+      {% block content %}{% endblock %}
+    </main>
+
+    <!-- ---- FOOTER ---------------------------------------------------- -->
+    <footer class="flex-shrink-0 bg-gray-900 border-t border-gray-700/60 px-6 py-3"
+            x-data="{ showAbout: false, showCookies: false, showContribute: false }">
+      <div class="relative flex items-center text-xs text-gray-400">
+
+        <!-- Left: copyright -->
+        <span class="whitespace-nowrap">
+          &copy; {{ 2025 }} Eduardo Andres Rabano. All rights reserved.
+        </span>
+
+        <!-- Center: links -->
+        <div class="absolute left-1/2 -translate-x-1/2 flex items-center space-x-5">
+          <button @click="showAbout = true"
+                  class="hover:text-white transition-colors">About</button>
+          <button @click="showContribute = true"
+                  class="hover:text-white transition-colors">Contribute</button>
+          <button @click="showCookies = true"
+                  class="hover:text-white transition-colors">Cookie Policy</button>
+        </div>
+      </div>
+
+      <!-- ---- About modal ---- -->
+      <div x-show="showAbout" x-cloak
+           class="fixed inset-0 z-50 flex items-center justify-center p-4"
+           @keydown.escape.window="showAbout = false">
+        <div class="absolute inset-0 bg-black/60" @click="showAbout = false"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 space-y-5 overflow-y-auto max-h-[90vh]">
+          <button @click="showAbout = false"
+                  class="absolute top-4 right-4 text-gray-400 hover:text-gray-700">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+
+          <div class="flex items-center space-x-3">
+            <img src="{{ url_for('static', filename='img/icon.png') }}" alt="TGM" class="w-10 h-10 object-contain" />
+            <div>
+              <h2 class="text-lg font-bold text-gray-900">{{ site_name }}</h2>
+              <p class="text-xs text-gray-500">Open-source local Terraform UI</p>
+            </div>
+          </div>
+
+          <p class="text-sm text-gray-700 leading-relaxed">
+            <strong>Terraform Graphical Manager</strong> is an open-source Python web application that provides a
+            Terraform Cloud-like graphical dashboard for managing Terraform workspaces stored locally on disk.
+          </p>
+          <p class="text-sm text-gray-700 leading-relaxed">
+            No cloud account required. No authentication. No internet connection needed.
+            It discovers workspaces automatically, detects providers and backends, executes real Terraform commands,
+            streams logs in real-time, visualizes plan diffs, inspects state, detects drift, renders dependency
+            graphs, and stores execution history locally or in cloud storage of your choice.
+          </p>
+
+          <div class="border-t border-gray-100 pt-4">
+            <p class="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">Creator &amp; Maintainer</p>
+            <a href="https://eduardoandres.net" target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center space-x-2 text-sm text-tf-600 hover:text-tf-800 font-medium transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+              </svg>
+              <span>Eduardo Andres Rabano — eduardoandres.net</span>
+            </a>
+          </div>
+
+          {% if repo_url %}
+          <div>
+            <a href="{{ repo_url }}" target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.477 2 2 6.484 2 12.021c0 4.428 2.865 8.184 6.839 9.504.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844a9.59 9.59 0 012.504.338c1.909-1.296 2.747-1.026 2.747-1.026.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0022 12.021C22 6.484 17.522 2 12 2z"/>
+              </svg>
+              <span>View source on GitHub</span>
+            </a>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- ---- Contribute modal ---- -->
+      <div x-show="showContribute" x-cloak
+           class="fixed inset-0 z-50 flex items-center justify-center p-4"
+           @keydown.escape.window="showContribute = false">
+        <div class="absolute inset-0 bg-black/60" @click="showContribute = false"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 space-y-5">
+          <button @click="showContribute = false"
+                  class="absolute top-4 right-4 text-gray-400 hover:text-gray-700">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-full bg-tf-100 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-tf-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+              </svg>
+            </div>
+            <h2 class="text-lg font-bold text-gray-900">Support the project</h2>
+          </div>
+
+          <p class="text-sm text-gray-700 leading-relaxed">
+            If you find <strong>Terraform Graphical Manager</strong> useful and would like to support its continued
+            development, please consider making a donation.
+          </p>
+          <p class="text-sm text-gray-700 leading-relaxed">
+            Your support helps the creator and main maintainer dedicate time to improving the project, fixing issues,
+            and adding new features for the community.
+          </p>
+
+          <a href="https://donate.stripe.com/9B628r8Hk3Kl7pOc6X9IQ01" target="_blank" rel="noopener noreferrer"
+             class="flex items-center justify-center w-full px-6 py-3 bg-tf-600 hover:bg-tf-700 text-white font-semibold rounded-xl transition-colors space-x-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+            </svg>
+            <span>DONATE</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- ---- Cookie Policy modal ---- -->
+      <div x-show="showCookies" x-cloak
+           class="fixed inset-0 z-50 flex items-center justify-center p-4"
+           @keydown.escape.window="showCookies = false">
+        <div class="absolute inset-0 bg-black/60" @click="showCookies = false"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 space-y-5 overflow-y-auto max-h-[90vh]">
+          <button @click="showCookies = false"
+                  class="absolute top-4 right-4 text-gray-400 hover:text-gray-700">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+
+          <h2 class="text-lg font-bold text-gray-900">Cookie Policy</h2>
+          <p class="text-xs text-gray-400">Last updated: March 2026</p>
+
+          <div class="space-y-4 text-sm text-gray-700 leading-relaxed">
+            <p>
+              <strong>Terraform Graphical Manager</strong> is a locally-hosted web application.
+              It runs exclusively on your own machine or private network and does not connect to any external service
+              unless explicitly directed to do so (e.g. cloud storage backends you configure yourself).
+            </p>
+
+            <div>
+              <p class="font-semibold text-gray-800 mb-1">Cookies used</p>
+              <p>
+                This application uses a single, strictly necessary session cookie (<code class="font-mono bg-gray-100 px-1 rounded">session</code>)
+                provided by the Flask web framework. It is used solely to support flash messages
+                (one-time notifications after form submissions such as saving settings).
+              </p>
+              <ul class="mt-2 space-y-1 list-disc list-inside text-gray-600">
+                <li>No tracking cookies are used.</li>
+                <li>No analytics or advertising cookies are used.</li>
+                <li>No third-party cookies are set.</li>
+                <li>No data from this application is transmitted to external servers.</li>
+              </ul>
+            </div>
+
+            <div>
+              <p class="font-semibold text-gray-800 mb-1">Local storage</p>
+              <p>
+                The application may use the browser's <code class="font-mono bg-gray-100 px-1 rounded">localStorage</code>
+                to preserve UI state (e.g. open tabs, panel preferences) across page loads.
+                This data never leaves your browser and is not sent to any server.
+              </p>
+            </div>
+
+            <div>
+              <p class="font-semibold text-gray-800 mb-1">Privacy</p>
+              <p>
+                All data processed by this application — including your Terraform workspace files, execution logs,
+                plan outputs, and state files — remains entirely within your local environment.
+                Nothing is shared with third parties.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </footer>
+    <!-- ---- /FOOTER --------------------------------------------------- -->
+
+  </div>
+  <!-- ---- /MAIN CONTENT ---------------------------------------------- -->
+
+</div>
+
+<!-- App JS -->
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block scripts %}{% endblock %}
+
+<script>
+  function sidebarTree() {
+    return {};
+  }
+</script>
+
+</body>
+</html>
