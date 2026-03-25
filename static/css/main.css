@@ -220,3 +220,31 @@ main { animation: fadeIn 0.15s ease; }
 /* Details summary arrow reset */
 details > summary { list-style: none; }
 details > summary::-webkit-details-marker { display: none; }
+
+/* ================================================================
+   SIDEBAR SEARCH  (>25 workspaces mode)
+   ================================================================ */
+
+/* Clear button inside native <input type="search"> */
+.sidebar-workspace-list::-webkit-scrollbar { width: 4px; }
+.sidebar-workspace-list::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+
+/* Highlight matched text inside sidebar links when filtering */
+.sidebar-ws-item a:focus-visible {
+  outline: 2px solid #5c4ee5;
+  outline-offset: 1px;
+}
+
+/* ================================================================
+   RUNS PAGINATION
+   ================================================================ */
+
+/* Page-size selector blends into the header */
+.runs-page-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%236b7280' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 18px;
+}

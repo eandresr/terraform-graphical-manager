@@ -133,17 +133,37 @@
 {% endif %}
 
 <!-- Workspace directory tree overview -->
-<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-  <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-    <h2 class="font-semibold text-gray-900">All Workspaces</h2>
-    <span class="text-xs text-gray-400 font-mono">{{ repos_root }}</span>
+<div class="bg-white rounded-xl border border-gray-200 overflow-hidden" x-data="dashboardFilter()">
+  <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+    <h2 class="font-semibold text-gray-900 flex-shrink-0">All Workspaces</h2>
+    <!-- Search -->
+    <div class="relative flex-1 max-w-xs">
+      <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z"/>
+      </svg>
+      <input
+        type="search"
+        x-model="query"
+        @input="filter()"
+        placeholder="Filter workspaces…"
+        class="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-gray-400
+               focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent"
+      />
+    </div>
+    <div class="flex items-center gap-3 flex-shrink-0">
+      <span class="text-xs text-gray-400" x-show="query" x-text="visibleCount + ' result' + (visibleCount !== 1 ? 's' : '')"></span>
+      <span class="text-xs text-gray-400 font-mono hidden sm:block">{{ repos_root }}</span>
+    </div>
   </div>
 
   {% if flat_workspaces %}
-  <div class="divide-y divide-gray-50">
+  <div class="divide-y divide-gray-50" id="dashboard-ws-list">
+    <!-- No results row -->
+    <div x-show="noResults" class="px-6 py-10 text-center text-sm text-gray-400">No workspaces match your filter.</div>
     {% for ws in flat_workspaces %}
     <a href="{{ url_for('workspace.workspace_detail', workspace_id=ws.id) }}"
-       class="flex items-center px-6 py-3 hover:bg-gray-50 transition-colors group">
+       class="flex items-center px-6 py-3 hover:bg-gray-50 transition-colors group dashboard-ws-row"
+       data-search="{{ ws.name | lower }} {{ ws.relative_path | lower }}">
 
       <!-- Path -->
       <div class="flex-1 min-w-0">
@@ -210,6 +230,27 @@
 
 {% block scripts %}
 <script>
+  // Dashboard workspace filter (search box in All Workspaces section)
+  function dashboardFilter() {
+    return {
+      query: '',
+      noResults: false,
+      visibleCount: document.querySelectorAll('.dashboard-ws-row').length,
+      filter() {
+        const q = this.query.trim().toLowerCase();
+        const items = document.querySelectorAll('.dashboard-ws-row');
+        let visible = 0;
+        items.forEach(el => {
+          const match = !q || (el.dataset.search || '').includes(q);
+          el.classList.toggle('hidden', !match);
+          if (match) visible++;
+        });
+        this.visibleCount = visible;
+        this.noResults = visible === 0 && q.length > 0;
+      },
+    };
+  }
+
   // Poll queue stats for the dashboard cards
   async function pollQueueStats() {
     try {

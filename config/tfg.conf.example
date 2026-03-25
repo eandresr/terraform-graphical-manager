@@ -11,7 +11,7 @@
 # your Terraform repositories / workspaces.
 # Any subdirectory with at least one .tf file is treated as a
 # workspace and will appear in the sidebar tree.
-repos_root = /data/terraform/repos
+repos_root = ./examples/repos
 
 # ──────────────────────────────────────────────────────────────
 # UI

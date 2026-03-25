@@ -274,7 +274,22 @@
       <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <h3 class="font-semibold text-gray-900">Run History</h3>
         <div class="flex items-center space-x-3">
+          <!-- Total count -->
           <span class="text-xs text-gray-400" x-show="runList.length" x-text="runList.length + ' total'"></span>
+
+          <!-- Page size selector -->
+          <div x-show="runList.length > 10" class="flex items-center space-x-1.5">
+            <label class="text-xs text-gray-400">Per page:</label>
+            <select x-model.number="runsPageSize" @change="runsPage = 1"
+                    class="text-xs border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-700
+                           focus:outline-none focus:ring-1 focus:ring-tf-400">
+              <template x-for="n in [10,15,20,25,50]" :key="n">
+                <option :value="n" x-text="n"></option>
+              </template>
+            </select>
+          </div>
+
+          <!-- Refresh -->
           <button @click="loadRuns()" :disabled="runsLoading" title="Refresh"
                   class="text-gray-400 hover:text-gray-600" :class="runsLoading ? 'opacity-50 cursor-wait' : ''">
             <svg class="w-3.5 h-3.5" :class="runsLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -295,9 +310,9 @@
         </div>
       </div>
 
-      <!-- Run list (lazy-loaded) -->
+      <!-- Run list (paginated) -->
       <div x-show="runList.length" class="divide-y divide-gray-50">
-        <template x-for="run in runList" :key="run.id">
+        <template x-for="run in runsPaged" :key="run.id">
           <div class="px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer"
                @click="selectRun(run.id)">
             <div class="flex items-center justify-between">
@@ -330,6 +345,48 @@
             </div>
           </div>
         </template>
+      </div>
+
+      <!-- Pagination controls -->
+      <div x-show="runsTotalPages > 1"
+           class="px-6 py-3 border-t border-gray-100 flex items-center justify-between">
+
+        <!-- Info -->
+        <span class="text-xs text-gray-400"
+              x-text="`Showing ${(runsPage - 1) * runsPageSize + 1}–${Math.min(runsPage * runsPageSize, runList.length)} of ${runList.length}`">
+        </span>
+
+        <!-- Page buttons -->
+        <div class="flex items-center space-x-1">
+          <!-- Prev -->
+          <button @click="runsPage--" :disabled="runsPage === 1"
+                  class="px-2 py-1 rounded text-xs border border-gray-200 text-gray-500 hover:bg-gray-50
+                         disabled:opacity-40 disabled:cursor-not-allowed">
+            ‹ Prev
+          </button>
+
+          <!-- Page numbers (show at most 7 around current) -->
+          <template x-for="p in runsPageRange" :key="p">
+            <button
+              @click="typeof p === 'number' && (runsPage = p)"
+              :disabled="typeof p !== 'number'"
+              class="px-2 py-1 rounded text-xs border"
+              :class="p === runsPage
+                        ? 'bg-tf-600 border-tf-600 text-white font-semibold'
+                        : typeof p === 'number'
+                            ? 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                            : 'border-transparent text-gray-400 cursor-default select-none'"
+              x-text="typeof p === 'number' ? p : '…'">
+            </button>
+          </template>
+
+          <!-- Next -->
+          <button @click="runsPage++" :disabled="runsPage === runsTotalPages"
+                  class="px-2 py-1 rounded text-xs border border-gray-200 text-gray-500 hover:bg-gray-50
+                         disabled:opacity-40 disabled:cursor-not-allowed">
+            Next ›
+          </button>
+        </div>
       </div>
 
       <!-- Empty state -->
@@ -596,6 +653,9 @@ function workspacePage(workspaceId) {
     selectedRunId: null,
     runLogs: [],
     gitPulling: false,
+    // Runs pagination
+    runsPage: 1,
+    runsPageSize: 10,
     // Output
     outputData: null,
     outputLoading: false,
@@ -627,6 +687,39 @@ function workspacePage(workspaceId) {
       this.setupSocket();
       this.loadVersions();
       if (this.activeTab === 'runs') this.loadRuns();
+    },
+
+    // ── Runs pagination getters ────────────────────────────────────────
+    get runsPaged() {
+      const start = (this.runsPage - 1) * this.runsPageSize;
+      return this.runList.slice(start, start + this.runsPageSize);
+    },
+
+    get runsTotalPages() {
+      return Math.max(1, Math.ceil(this.runList.length / this.runsPageSize));
+    },
+
+    /**
+     * Returns an array of page numbers (and '…' ellipsis strings) to render
+     * as pagination buttons, keeping at most 7 visible slots.
+     */
+    get runsPageRange() {
+      const total = this.runsTotalPages;
+      const cur   = this.runsPage;
+      if (total <= 7) {
+        return Array.from({ length: total }, (_, i) => i + 1);
+      }
+      const pages = [];
+      // Always show first
+      pages.push(1);
+      if (cur > 3)          pages.push('…');
+      for (let p = Math.max(2, cur - 1); p <= Math.min(total - 1, cur + 1); p++) {
+        pages.push(p);
+      }
+      if (cur < total - 2)  pages.push('…');
+      // Always show last
+      pages.push(total);
+      return pages;
     },
 
     switchTab(tab) {
@@ -692,6 +785,7 @@ function workspacePage(workspaceId) {
         const data = await res.json();
         this.runList = data;
         this.runsLoaded = true;
+        this.runsPage = 1; // reset to first page on reload
       } catch (e) {
         // non-critical
       } finally {

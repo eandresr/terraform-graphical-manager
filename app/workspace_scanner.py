@@ -56,6 +56,8 @@ class WorkspaceScanner:
             if self._has_tf_files(dirpath, filenames):
                 rel = os.path.relpath(dirpath, self.repos_root)
                 workspaces.append(self._build_workspace(dirpath, rel))
+                # Stop descending: subdirs of a workspace are not separate workspaces
+                dirnames[:] = []
 
         return workspaces
 
