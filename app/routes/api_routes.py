@@ -542,7 +542,9 @@ def run_sentinel(workspace_id: str):
     extra_path = ws_cfg.get("sentinel_extra_policies") or None
     global_policies = config.sentinel_global_policies or None
     # Active sets: workspace override takes precedence over global setting
-    active_global = ws_cfg.get("sentinel_active_global_sets") or config.sentinel_active_policy_sets or None
+    active_global = (
+        ws_cfg.get("sentinel_active_global_sets") or config.sentinel_active_policy_sets or None
+    )
     active_extra = ws_cfg.get("sentinel_active_extra_sets") or None
 
     if not global_policies and not extra_path:
@@ -571,15 +573,16 @@ def run_sentinel(workspace_id: str):
         isolated_env = build_execution_env(workspace["providers"], {})
 
         from app.terraform_runner import TerraformRunner
-        import tempfile, os
+        import tempfile
+        import os
         tmpdir = tempfile.mkdtemp(prefix="tgm-sentinel-plan-")
         try:
             runner = TerraformRunner(workspace["abs_path"], isolated_env, tf_binary)
-            runner.init(lambda l: None)
+            runner.init(lambda _: None)
             plan_binary = os.path.join(tmpdir, "tfplan.binary")
-            ok = runner.plan(lambda l: None, plan_binary_path=plan_binary)
+            ok = runner.plan(lambda _: None, plan_binary_path=plan_binary)
             if ok:
-                plan_json = runner.show_json(plan_binary, lambda l: None)
+                plan_json = runner.show_json(plan_binary, lambda _: None)
         finally:
             import shutil
             shutil.rmtree(tmpdir, ignore_errors=True)

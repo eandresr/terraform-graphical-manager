@@ -106,7 +106,9 @@ def workspace_detail(workspace_id: str):
 
     config = current_app.config["TFG_CONFIG"]
     sentinel_extra_policies = ws_cfg.get("sentinel_extra_policies", "")
-    sentinel_extra_sets = discover_policy_sets(sentinel_extra_policies) if sentinel_extra_policies else []
+    sentinel_extra_sets = (
+        discover_policy_sets(sentinel_extra_policies) if sentinel_extra_policies else []
+    )
     global_policy_sets = discover_policy_sets(config.sentinel_global_policies)
 
     return render_template(
