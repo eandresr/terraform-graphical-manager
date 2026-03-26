@@ -92,6 +92,15 @@ def _add_start_command(subparsers) -> None:
 
 def _cmd_start(args: argparse.Namespace) -> None:
     """Handle the 'tgm start' command."""
+    import os as _os
+    # Anchor the project root so app.py can find templates/ and static/ when
+    # installed non-editably (pip install .).  cwd is the project directory
+    # when the user runs 'tgm start' from there; the env var wins if already set.
+    if "TGM_ROOT_DIR" not in _os.environ:
+        cwd = _os.getcwd()
+        if _os.path.isdir(_os.path.join(cwd, "templates")):
+            _os.environ["TGM_ROOT_DIR"] = cwd
+
     # Lazy import — keeps 'tgm --help' fast and free of Flask side-effects.
     from app.app import create_app, socketio
 
