@@ -43,6 +43,48 @@ No cloud account required. No authentication. No internet needed. Runs entirely 
 
 ---
 
+## 🎬 Quick Preview
+
+Want to try TGM without touching your real Terraform repos or writing any config?
+**`tgm preview`** spins up a fully working demo in seconds — no setup required.
+
+```bash
+# Install the package (once)
+pip install .
+
+# Launch the demo
+tgm preview
+```
+
+This command:
+
+1. Creates a **temporary directory** (auto-deleted on exit) containing:
+   - `conf/` — a ready-to-use `tfg.conf` pointing at the bundled examples
+   - `workspaces/` — a copy of the 15+ example Terraform workspaces shipped with the project
+   - `sentinel/` — a copy of the bundled Sentinel policy sets (cost, networking, security, tagging)
+2. Starts the web server and opens **http://localhost:5005** with the demo data pre-loaded.
+3. Cleans up the temp directory automatically when you stop the server (`Ctrl-C`).
+
+> Nothing is written to your home directory or project folder.
+> All execution history created during the preview lives only in the temp dir.
+
+### Preview flags
+
+```bash
+tgm preview                                  # default port 5005
+tgm preview --port 8080                      # custom port
+tgm preview --host 127.0.0.1 --port 5000    # bind to localhost only
+tgm preview --debug                          # enable Flask debug mode
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--port PORT` | `5005` | TCP port to listen on |
+| `--host HOST` | `0.0.0.0` | Network interface to bind to |
+| `--debug` | `false` | Enable Flask debug / auto-reload mode |
+
+---
+
 ## 📋 Prerequisites
 
 - Python **3.9+**
@@ -95,6 +137,19 @@ After `pip install .` (or `pip install -e .` for development), the `tgm` command
 tgm --help              # top-level help
 tgm start --help        # help for the start subcommand
 ```
+
+### `tgm preview`
+
+Launch a zero-config live demo using the bundled example workspaces and Sentinel policies.
+A temporary directory is created for the duration of the session and removed on exit.
+
+```bash
+tgm preview                 # demo on http://localhost:5005
+tgm preview --port 8080    # custom port
+tgm preview --debug        # debug mode
+```
+
+See [Quick Preview](#-quick-preview) for full details.
 
 ### `tgm start`
 
