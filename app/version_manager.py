@@ -2,16 +2,13 @@
 Terraform Version Manager — discovers locally installed Terraform versions
 from a configured versions folder.
 
-Expected folder structure:
+    Expected folder structure (both formats accepted):
     <versions_folder>/
-    ├── 1_5_7/
-    │   └── terraform          (terraform.exe on Windows)
-    ├── 1_6_0/
+    ├── 1.5.7/          (dots)      ← e.g. /opt/terraform/1.14.8/
+    │   └── terraform
+    ├── 1_6_0/          (underscores, legacy)
     │   └── terraform
     └── ...
-
-Subdirectory names follow the pattern  major_minor_patch  and are displayed
-in the UI as  major.minor.patch.
 """
 import json
 import os
@@ -39,10 +36,13 @@ def discover_versions(versions_folder: Optional[str]) -> List[Dict]:
     for entry in os.scandir(versions_folder):
         if not entry.is_dir():
             continue
-        if not re.match(r"^\d+_\d+_\d+$", entry.name):
+        # Accept both "1.14.8" (dots) and "1_14_8" (underscores)
+        if re.match(r"^\d+\.\d+\.\d+$", entry.name):
+            version_str = entry.name                     # already dot-separated
+        elif re.match(r"^\d+_\d+_\d+$", entry.name):
+            version_str = entry.name.replace("_", ".")
+        else:
             continue
-
-        version_str = entry.name.replace("_", ".")
         binary_path = os.path.join(entry.path, binary_name)
 
         if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
@@ -108,11 +108,12 @@ def get_terraform_binary(version: Optional[str], versions_folder: Optional[str])
     - Otherwise fall back to the system binary.
     """
     if version and version != "system" and versions_folder:
-        dir_name = version.replace(".", "_")
+        # Try dot-named dir first (e.g. "1.14.8"), then underscore (legacy "1_14_8")
         binary_name = "terraform.exe" if sys.platform == "win32" else "terraform"
-        binary_path = os.path.join(versions_folder, dir_name, binary_name)
-        if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
-            return binary_path
+        for dir_name in (version, version.replace(".", "_")):
+            binary_path = os.path.join(versions_folder, dir_name, binary_name)
+            if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
+                return binary_path
 
     # System default
     return shutil.which("terraform") or "terraform"

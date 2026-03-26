@@ -35,7 +35,8 @@ No cloud account required. No authentication. No internet needed. Runs entirely 
 | **Dependency graph** | `terraform graph` rendered interactively with D3.js (zoom, pan, click) |
 | **Outputs** | `terraform output -json` displayed with sensitive values masked |
 | **Git integration** | Branch, commit hash, author, message display · One-click `git pull` |
-| **Version management** | Multiple local Terraform binaries organized by folder · Per-workspace version pin · Per-run override via modal |
+| **Version management** | Multiple local Terraform binaries · dot (`1.14.8`) or underscore (`1_14_8`) folder names · Per-workspace version pin · Per-run override |
+| **Workspace discovery** | Recursive `.tf` scanner · Group folders rendered as collapsible tree · Sidebar search filter · Subdirectories of a workspace are never treated as separate workspaces |
 | **Settings UI** | Visual panel to edit all `tfg.conf` settings · Backend checklist · Site name customization |
 | **Storage backends** | Local filesystem · AWS S3 · GCP Cloud Storage · Azure Blob Storage |
 | **Credential isolation** | Each execution runs with its own isolated environment — no credential leakage |
@@ -151,8 +152,8 @@ max_concurrent = 3
 
 [terraform]
 # Path to a directory containing local Terraform version binaries.
-# Each subdirectory must be named  major_minor_patch  (e.g. 1_5_7)
-# and contain a terraform  (or terraform.exe) binary.
+# Subdirectory names can use dots (1.14.8) or underscores (1_14_8).
+# Each subdirectory must contain a terraform (or terraform.exe) binary.
 # Leave empty to use only the system Terraform binary.
 versions_folder =
 
@@ -169,7 +170,7 @@ default_version = system
 | `ui.site_name` | string | `Terraform Graphical Manager` | Application name displayed in the UI |
 | `ui.theme` | string | `terraform-cloud` | Visual theme |
 | `execution.max_concurrent` | integer | `3` | Max parallel Terraform executions |
-| `terraform.versions_folder` | path | _(empty)_ | Directory containing local Terraform binaries |
+| `terraform.versions_folder` | path | _(empty)_ | Directory containing local Terraform binaries (dot or underscore folder names) |
 | `terraform.default_version` | string | `system` | Default Terraform version (`system` = PATH binary) |
 
 ---
@@ -262,15 +263,31 @@ TGM lets you maintain multiple local Terraform binaries and pick the right one p
 
 ### Setting up local versions
 
-1. Create a versions folder (any path):
+1. Create a versions folder and place each binary inside a subdirectory named after its version.
+
+TGM accepts **both** naming conventions — dots (recommended) or underscores (legacy):
 
 ```
-/opt/terraform-versions/
-├── 1_5_7/
-│   └── terraform          (must be executable)
-├── 1_6_0/
+/opt/terraform/              ← versions_folder
+├── 1.14.8/                  ← dot format  ✓  (recommended)
 │   └── terraform
-└── 1_7_2/
+├── 1.13.5/
+│   └── terraform
+├── 1.12.2/
+│   └── terraform
+├── 1.11.4/
+│   └── terraform
+└── 1.10.5/
+    └── terraform
+```
+
+The legacy underscore format also works:
+
+```
+/opt/terraform-versions/     ← versions_folder
+├── 1_5_7/                   ← underscore format  ✓
+│   └── terraform
+└── 1_6_0/
     └── terraform
 ```
 
@@ -278,8 +295,8 @@ TGM lets you maintain multiple local Terraform binaries and pick the right one p
 
 ```ini
 [terraform]
-versions_folder = /opt/terraform-versions
-default_version = 1_6_0
+versions_folder = /opt/terraform
+default_version = 1.14.8
 ```
 
 ### Version selection priority
@@ -302,6 +319,24 @@ System Terraform binary (PATH)
 |---|---|
 | System binary | `1.5.7 (System Default)` |
 | Local binary | `1.6.0` |
+
+### Workspace discovery rules
+
+The scanner walks `repos_root` recursively and treats a directory as a **workspace** as soon as it finds at least one `.tf` file inside it. Subdirectories of that workspace are **not** scanned further — this means modules, child modules, and helper directories inside a workspace root are correctly ignored as separate workspaces.
+
+Example with a `group1/` prefix folder:
+
+```
+repos_root/
+├── standalone-infra/        ← workspace  (contains main.tf)
+│   └── modules/             ← ignored    (subdirectory of workspace)
+│       └── vpc/
+└── group1/                  ← group folder (no .tf at this level)
+    ├── networking/          ← workspace  (contains main.tf)
+    └── compute/             ← workspace  (contains main.tf)
+```
+
+The sidebar renders group folders as collapsible nodes and workspace leaves as links.
 
 ---
 

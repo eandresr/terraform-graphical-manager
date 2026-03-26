@@ -135,9 +135,13 @@
 <!-- Workspace directory tree overview -->
 <div class="bg-white rounded-xl border border-gray-200 overflow-hidden" x-data="dashboardFilter()">
   <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
-    <h2 class="font-semibold text-gray-900 flex-shrink-0">All Workspaces</h2>
-    <!-- Search -->
-    <div class="relative flex-1 max-w-xs">
+    <!-- Title + root path -->
+    <h2 class="font-semibold text-gray-900 flex-shrink-0 whitespace-nowrap">
+      Workspaces
+      <span class="text-xs text-gray-400 font-mono font-normal ml-1">({{ repos_root }})</span>
+    </h2>
+    <!-- Search (right side) -->
+    <div class="relative flex-shrink-0 w-56">
       <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z"/>
       </svg>
@@ -149,10 +153,6 @@
         class="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-gray-400
                focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent"
       />
-    </div>
-    <div class="flex items-center gap-3 flex-shrink-0">
-      <span class="text-xs text-gray-400" x-show="query" x-text="visibleCount + ' result' + (visibleCount !== 1 ? 's' : '')"></span>
-      <span class="text-xs text-gray-400 font-mono hidden sm:block">{{ repos_root }}</span>
     </div>
   </div>
 
