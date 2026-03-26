@@ -82,6 +82,7 @@ def dashboard():
         total_applies=total_applies,
         total_errored=total_errored,
         errored_workspaces=errored_workspaces,
+        ws_latest=ws_latest,
     )
 
 
