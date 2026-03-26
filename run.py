@@ -7,6 +7,10 @@ import argparse
 import os
 import sys
 
+# Anchor the project root **before** any app import so that app.py can locate
+# templates/ and static/ correctly even when installed non-editably.
+os.environ.setdefault("TGM_ROOT_DIR", os.path.dirname(os.path.abspath(__file__)))
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.app import create_app, socketio  # noqa: E402
@@ -35,7 +39,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list = None) -> None:
     args = _build_parser().parse_args(argv)
-    print(f"\n  Terraform Graphical Manager")
+    print("\n  Terraform Graphical Manager")
     print(f"  Running at: http://0.0.0.0:{args.port}\n")
     socketio.run(
         app,
@@ -48,4 +52,3 @@ def main(argv: list = None) -> None:
 
 if __name__ == "__main__":
     main()
-

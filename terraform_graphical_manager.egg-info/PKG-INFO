@@ -251,10 +251,12 @@ Dynamic: license-file
   <p>
     <a href="#-features">Features</a> ·
     <a href="#-installation">Installation</a> ·
+    <a href="#%EF%B8%8F-cli">CLI</a> ·
     <a href="#-configuration">Configuration</a> ·
     <a href="#-storage-backends">Storage Backends</a> ·
     <a href="#-terraform-version-management">Version Management</a> ·
     <a href="#-rest-api">REST API</a> ·
+    <a href="#-testing--linting">Testing</a> ·
     <a href="#-security">Security</a>
   </p>
 </div>
@@ -279,7 +281,8 @@ No cloud account required. No authentication. No internet needed. Runs entirely 
 | **Dependency graph** | `terraform graph` rendered interactively with D3.js (zoom, pan, click) |
 | **Outputs** | `terraform output -json` displayed with sensitive values masked |
 | **Git integration** | Branch, commit hash, author, message display · One-click `git pull` |
-| **Version management** | Multiple local Terraform binaries organized by folder · Per-workspace version pin · Per-run override via modal |
+| **Version management** | Multiple local Terraform binaries · dot (`1.14.8`) or underscore (`1_14_8`) folder names · Per-workspace version pin · Per-run override |
+| **Workspace discovery** | Recursive `.tf` scanner · Group folders rendered as collapsible tree · Sidebar search filter · Subdirectories of a workspace are never treated as separate workspaces |
 | **Settings UI** | Visual panel to edit all `tfg.conf` settings · Backend checklist · Site name customization |
 | **Storage backends** | Local filesystem · AWS S3 · GCP Cloud Storage · Azure Blob Storage |
 | **Credential isolation** | Each execution runs with its own isolated environment — no credential leakage |
@@ -317,13 +320,53 @@ cp config/tfg.conf.example tfg.conf
 # Edit tfg.conf — at minimum, set repos_root to your Terraform repos directory
 
 # 5. Launch
-python run.py
+tgm start
 ```
 
 Open **http://localhost:5005** in your browser.
 
-> **Port** defaults to `5005`. Override with `PORT=8080 python run.py`.  
-> **Debug mode** defaults to off. Enable with `DEBUG=true python run.py`.
+> **Port** defaults to `5005`. Override with `tgm start --port 8080`.  
+> **Debug mode** defaults to off. Enable with `tgm start --debug`.  
+> You can still run the app directly with `python run.py [--port PORT]` if you prefer.
+
+---
+
+## 🖥️ CLI
+
+After `pip install .` (or `pip install -e .` for development), the `tgm` command is available globally.
+
+### Commands
+
+```bash
+tgm --help              # top-level help
+tgm start --help        # help for the start subcommand
+```
+
+### `tgm start`
+
+```bash
+tgm start                                    # default port 5005
+tgm start --port 5000                        # custom port
+tgm start --port 8080 --host 127.0.0.1      # bind to localhost only
+tgm start --port 5000 --debug               # enable Flask debug mode
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--port PORT` | `5005` (or `$PORT`) | TCP port to listen on |
+| `--host HOST` | `0.0.0.0` (or `$HOST`) | Network interface to bind to |
+| `--debug` | `false` (or `$DEBUG=true`) | Enable Flask debug/reload mode |
+
+### Environment variable fallbacks
+
+All flags can also be set via environment variables:
+
+```bash
+export PORT=8080
+export HOST=127.0.0.1
+export DEBUG=true
+tgm start
+```
 
 ---
 
@@ -355,8 +398,8 @@ max_concurrent = 3
 
 [terraform]
 # Path to a directory containing local Terraform version binaries.
-# Each subdirectory must be named  major_minor_patch  (e.g. 1_5_7)
-# and contain a terraform  (or terraform.exe) binary.
+# Subdirectory names can use dots (1.14.8) or underscores (1_14_8).
+# Each subdirectory must contain a terraform (or terraform.exe) binary.
 # Leave empty to use only the system Terraform binary.
 versions_folder =
 
@@ -373,7 +416,7 @@ default_version = system
 | `ui.site_name` | string | `Terraform Graphical Manager` | Application name displayed in the UI |
 | `ui.theme` | string | `terraform-cloud` | Visual theme |
 | `execution.max_concurrent` | integer | `3` | Max parallel Terraform executions |
-| `terraform.versions_folder` | path | _(empty)_ | Directory containing local Terraform binaries |
+| `terraform.versions_folder` | path | _(empty)_ | Directory containing local Terraform binaries (dot or underscore folder names) |
 | `terraform.default_version` | string | `system` | Default Terraform version (`system` = PATH binary) |
 
 ---
@@ -466,15 +509,31 @@ TGM lets you maintain multiple local Terraform binaries and pick the right one p
 
 ### Setting up local versions
 
-1. Create a versions folder (any path):
+1. Create a versions folder and place each binary inside a subdirectory named after its version.
+
+TGM accepts **both** naming conventions — dots (recommended) or underscores (legacy):
 
 ```
-/opt/terraform-versions/
-├── 1_5_7/
-│   └── terraform          (must be executable)
-├── 1_6_0/
+/opt/terraform/              ← versions_folder
+├── 1.14.8/                  ← dot format  ✓  (recommended)
 │   └── terraform
-└── 1_7_2/
+├── 1.13.5/
+│   └── terraform
+├── 1.12.2/
+│   └── terraform
+├── 1.11.4/
+│   └── terraform
+└── 1.10.5/
+    └── terraform
+```
+
+The legacy underscore format also works:
+
+```
+/opt/terraform-versions/     ← versions_folder
+├── 1_5_7/                   ← underscore format  ✓
+│   └── terraform
+└── 1_6_0/
     └── terraform
 ```
 
@@ -482,8 +541,8 @@ TGM lets you maintain multiple local Terraform binaries and pick the right one p
 
 ```ini
 [terraform]
-versions_folder = /opt/terraform-versions
-default_version = 1_6_0
+versions_folder = /opt/terraform
+default_version = 1.14.8
 ```
 
 ### Version selection priority
@@ -507,9 +566,117 @@ System Terraform binary (PATH)
 | System binary | `1.5.7 (System Default)` |
 | Local binary | `1.6.0` |
 
+### Workspace discovery rules
+
+The scanner walks `repos_root` recursively and treats a directory as a **workspace** as soon as it finds at least one `.tf` file inside it. Subdirectories of that workspace are **not** scanned further — this means modules, child modules, and helper directories inside a workspace root are correctly ignored as separate workspaces.
+
+Example with a `group1/` prefix folder:
+
+```
+repos_root/
+├── standalone-infra/        ← workspace  (contains main.tf)
+│   └── modules/             ← ignored    (subdirectory of workspace)
+│       └── vpc/
+└── group1/                  ← group folder (no .tf at this level)
+    ├── networking/          ← workspace  (contains main.tf)
+    └── compute/             ← workspace  (contains main.tf)
+```
+
+The sidebar renders group folders as collapsible nodes and workspace leaves as links.
+
 ---
 
-## 🔌 REST API
+## �️ Sentinel Policy Integration
+
+TGM integrates with the [HashiCorp Sentinel](https://developer.hashicorp.com/sentinel) policy-as-code framework.  
+Sentinel policies are evaluated against `terraform plan` output before an apply is allowed.
+
+### Policy set layout
+
+Each **policy set** is a directory containing one or more `.sentinel` policy files and an optional `sentinel.hcl` configuration:
+
+```
+/opt/sentinel-policies/
+├── base-compliance/
+│   ├── require-tags.sentinel
+│   ├── no-public-s3.sentinel
+│   └── sentinel.hcl          ← optional enforcement config
+└── network-rules/
+    └── restrict-regions.sentinel
+```
+
+`sentinel.hcl` lets you override the enforcement level per policy:
+
+```hcl
+policy "require-tags" {
+  enforcement_level = "hard-mandatory"
+}
+
+policy "no-public-s3" {
+  enforcement_level = "soft-mandatory"
+}
+```
+
+| Enforcement level | Behaviour |
+|---|---|
+| `hard-mandatory` | Policy **must** pass. Blocks apply entirely if it fails. |
+| `soft-mandatory` | Policy failure blocks apply by default but can be overridden. |
+| `advisory` | Policy failure is logged as a warning but never blocks. |
+
+Default enforcement level (when `sentinel.hcl` is absent or the policy is not listed) is `hard-mandatory`.
+
+### Configuring Sentinel in `tfg.conf`
+
+```ini
+[sentinel]
+# Full path to the Sentinel CLI binary. Leave blank to use 'sentinel' on PATH.
+cli_path =
+
+# Directory of global policy sets applied to every workspace.
+global_policies = /opt/sentinel-policies
+
+# Automatically run Sentinel after every terraform plan.
+enforce_on_plan = true
+
+# If true, block terraform apply when any non-advisory policy fails.
+# Requires enforce_on_plan = true.
+enforce_on_apply = true
+```
+
+These options can also be changed through the **Settings UI** (`/settings` → *Sentinel Policy Integration*).
+
+### Workspace-level extra policies
+
+Each workspace can have an additional policy sets directory configured from the **Sentinel tab** in the workspace view.  
+Extra workspace policies are checked **in addition to** the global policy sets.
+
+### How plan evaluation works
+
+TGM uses the standard Terraform Cloud `tfplan/v2` mock pattern so that policies written for Terraform Cloud work without modification.  
+For each policy set, a temporary `run.hcl` is generated:
+
+```hcl
+mock "tfplan/v2" {
+  module {
+    source = "/tmp/<uuid>/mock-tfplan.json"
+  }
+}
+```
+
+Then `sentinel apply -config=run.hcl <policy>.sentinel` is invoked for each policy file.
+
+### REST API — Sentinel endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/sentinel/config` | Global sentinel configuration + detected policy sets |
+| `GET` | `/api/workspace/{id}/sentinel/config` | Workspace extra policies + discovered sets |
+| `POST` | `/api/workspace/{id}/sentinel/config` | Save workspace extra policies path |
+| `POST` | `/api/workspace/{id}/sentinel/run` | Run Sentinel check against latest plan |
+
+---
+
+## �🔌 REST API
 
 All UI features are powered by a JSON REST API. Base path: `/api/`
 
@@ -632,12 +799,14 @@ Key security properties:
 
 ```
 terraform-graphical-manager/
-├── run.py                         ← entry point (python run.py)
+├── run.py                         ← direct entry point (python run.py [--port PORT])
+├── pyproject.toml                 ← package metadata, dependencies, entry points
 ├── tfg.conf                       ← your local configuration (gitignored)
 ├── requirements.txt
 │
 ├── app/
 │   ├── app.py                     ← Flask app factory
+│   ├── cli.py                     ← tgm CLI entry point (tgm start --port …)
 │   ├── config.py                  ← tfg.conf parser (Config class)
 │   ├── workspace_scanner.py       ← recursive .tf discovery → workspace tree
 │   ├── provider_detector.py       ← AWS / GCP / Azure provider detection
@@ -680,6 +849,17 @@ terraform-graphical-manager/
 │       ├── main.js
 │       └── graph.js               ← D3.js force-directed graph renderer
 │
+├── tests/
+│   ├── conftest.py                ← shared pytest fixtures (Flask test client)
+│   ├── test_config.py             ← Config class tests
+│   ├── test_plan_parser.py        ← plan_parser tests
+│   ├── test_state_parser.py       ← state_parser tests
+│   ├── test_workspace_scanner.py  ← WorkspaceScanner tests
+│   ├── test_version_manager.py    ← version_manager tests
+│   ├── test_routes.py             ← Flask route tests
+│   ├── test_cli.py                ← CLI entry point tests
+│   └── test_run.py                ← run.py --port/--debug tests
+│
 └── config/
     └── tfg.conf.example           ← configuration template
 ```
@@ -707,6 +887,67 @@ Flask Web Application
                 │
                 ▼
         Terraform CLI (subprocess)   +   Storage (disk / cloud)
+```
+
+---
+
+## 🧪 Testing & Linting
+
+### Running the test suite
+
+The project uses **pytest** with 112+ tests covering parsers, config, API routes, CLI, workspace scanner, and version manager.
+
+```bash
+# Install dev dependencies (includes pytest, flake8, pip-audit)
+pip install -e ".[dev]"
+
+# Run all tests
+pytest tests/
+
+# Run with verbose output
+pytest tests/ -v
+
+# Run a specific test file
+pytest tests/test_cli.py -v
+pytest tests/test_plan_parser.py -v
+```
+
+### Test coverage by module
+
+| Test file | Module(s) covered |
+|---|---|
+| `tests/test_config.py` | `app/config.py` — defaults, file parsing, `save()` |
+| `tests/test_plan_parser.py` | `app/plan_parser.py` — counts, sorting, diffs, metadata |
+| `tests/test_state_parser.py` | `app/state_parser.py` — resources, modules, sensitive masking |
+| `tests/test_workspace_scanner.py` | `app/workspace_scanner.py` — discovery, ID encoding |
+| `tests/test_version_manager.py` | `app/version_manager.py` — binary discovery and resolution |
+| `tests/test_routes.py` | Flask routes — dashboard, API endpoints, settings |
+| `tests/test_cli.py` | `app/cli.py` — argument parsing, env vars, server launch |
+| `tests/test_run.py` | `run.py` — `--port`, `--debug`, `$PORT`, `$DEBUG` |
+
+### Linting with flake8
+
+The project enforces **PEP 8** style with a max line length of 99 characters. Config is in `pyproject.toml`.
+
+```bash
+# Lint the entire app/ directory
+flake8 --max-line-length=99 app/
+
+# Or simply (picks up pyproject.toml config automatically)
+flake8 app/
+```
+
+### Security audit
+
+```bash
+# Scan dependencies for known vulnerabilities
+pip-audit
+```
+
+### Run everything in one shot
+
+```bash
+pytest tests/ -q && flake8 app/ && echo "ALL CLEAN"
 ```
 
 ---

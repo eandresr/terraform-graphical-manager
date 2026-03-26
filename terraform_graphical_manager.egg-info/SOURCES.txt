@@ -3,6 +3,7 @@ README.md
 pyproject.toml
 app/__init__.py
 app/app.py
+app/auth.py
 app/backend_detector.py
 app/cli.py
 app/config.py
@@ -10,12 +11,14 @@ app/env_validator.py
 app/execution_queue.py
 app/plan_parser.py
 app/provider_detector.py
+app/sentinel_runner.py
 app/state_parser.py
 app/terraform_runner.py
 app/version_manager.py
 app/workspace_scanner.py
 app/routes/__init__.py
 app/routes/api_routes.py
+app/routes/auth_routes.py
 app/routes/execution_routes.py
 app/routes/settings_routes.py
 app/routes/workspace_routes.py
@@ -30,6 +33,7 @@ terraform_graphical_manager.egg-info/dependency_links.txt
 terraform_graphical_manager.egg-info/entry_points.txt
 terraform_graphical_manager.egg-info/requires.txt
 terraform_graphical_manager.egg-info/top_level.txt
+tests/test_cli.py
 tests/test_config.py
 tests/test_plan_parser.py
 tests/test_routes.py

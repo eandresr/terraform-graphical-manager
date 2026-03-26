@@ -12,7 +12,36 @@ from flask_socketio import SocketIO  # noqa: E402
 socketio = SocketIO()
 execution_queue = None
 
-_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def _find_root_dir() -> str:
+    """Locate the project root that contains templates/ and static/.
+
+    Works for both editable installs (pip install -e .) and non-editable
+    installs (pip install .) by trying, in order:
+    1. TGM_ROOT_DIR env var  — set by run.py / tgm CLI before import
+    2. Current working directory — when running 'tgm start' from project root
+    3. Walking up from __file__  — for editable installs
+    4. Original two-levels-up fallback
+    """
+    env_root = os.environ.get("TGM_ROOT_DIR")
+    if env_root and os.path.isdir(os.path.join(env_root, "templates")):
+        return env_root
+
+    cwd = os.getcwd()
+    if os.path.isdir(os.path.join(cwd, "templates")):
+        return cwd
+
+    candidate = os.path.abspath(__file__)
+    for _ in range(8):
+        candidate = os.path.dirname(candidate)
+        if os.path.isdir(os.path.join(candidate, "templates")):
+            return candidate
+
+    # Original fallback — works for editable installs
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+_ROOT_DIR = _find_root_dir()
 
 
 def create_app(config_path: str = None) -> Flask:
