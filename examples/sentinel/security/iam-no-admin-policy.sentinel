@@ -1,0 +1,30 @@
+# iam-no-admin-policy.sentinel
+#
+# WHAT  : Bloquea la creación de roles o usuarios con la política
+#         administradora gestionada de AWS (AdministratorAccess) adjunta.
+# WHY   : AdministratorAccess otorga acceso completo a toda la cuenta;
+#         su uso debe ser excepcional y no automatizado.
+# LEVEL : hard-mandatory
+
+import "tfplan/v2" as tfplan
+
+admin_policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+
+attachment_types = [
+  "aws_iam_role_policy_attachment",
+  "aws_iam_user_policy_attachment",
+  "aws_iam_group_policy_attachment",
+]
+
+attachments = filter tfplan.resource_changes as _, rc {
+  rc.type in attachment_types and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+violations = filter attachments as _, att {
+  att.change.after.policy_arn is admin_policy_arn
+}
+
+main = rule {
+  length(violations) is 0
+}

@@ -1,0 +1,47 @@
+# no-ssh-open-to-world.sentinel
+#
+# WHAT  : Impide que ningún Security Group permita tráfico SSH (puerto 22)
+#         desde 0.0.0.0/0 o ::/0.
+# WHY   : Puerto 22 abierto al mundo es el vector de ataque de fuerza
+#         bruta más explotado en la nube. CIS AWS Benchmark §4.1.
+# LEVEL : hard-mandatory
+
+import "tfplan/v2" as tfplan
+
+open_cidrs = ["0.0.0.0/0", "::/0"]
+
+security_groups = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_security_group" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+sg_rules_resources = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_security_group_rule" and
+  rc.change.after.type is "ingress" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+ssh_in_range = func(from_port, to_port) {
+  return from_port <= 22 and to_port >= 22
+}
+
+# Comprueba reglas inline dentro del bloque security_group
+sg_inline_violations = filter security_groups as _, sg {
+  any (sg.change.after.ingress else []) as ir {
+    ssh_in_range(ir.from_port, ir.to_port) and
+    (any (ir.cidr_blocks else []) as cidr { cidr in open_cidrs } or
+     any (ir.ipv6_cidr_blocks else []) as cidr { cidr in open_cidrs })
+  }
+}
+
+# Comprueba recursos aws_security_group_rule separados
+sgr_violations = filter sg_rules_resources as _, sgr {
+  ssh_in_range(sgr.change.after.from_port, sgr.change.after.to_port) and
+  (any (sgr.change.after.cidr_blocks else []) as cidr { cidr in open_cidrs } or
+   any (sgr.change.after.ipv6_cidr_blocks else []) as cidr { cidr in open_cidrs })
+}
+
+main = rule {
+  length(sg_inline_violations) is 0 and
+  length(sgr_violations) is 0
+}

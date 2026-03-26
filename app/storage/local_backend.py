@@ -157,6 +157,19 @@ class LocalBackend:
         os.makedirs(ws_dir, exist_ok=True)
         self._write_json(os.path.join(ws_dir, "workspace_config.json"), config)
 
+    # ------------------------------------------------------------------
+    # Per-workspace Sentinel last result
+    # ------------------------------------------------------------------
+
+    def get_sentinel_last_result(self, workspace_id: str) -> Optional[Dict[str, Any]]:
+        path = os.path.join(self._root, "workspaces", workspace_id, "sentinel_last_result.json")
+        return self._read_json(path)
+
+    def set_sentinel_last_result(self, workspace_id: str, data: Dict[str, Any]) -> None:
+        ws_dir = os.path.join(self._root, "workspaces", workspace_id)
+        os.makedirs(ws_dir, exist_ok=True)
+        self._write_json(os.path.join(ws_dir, "sentinel_last_result.json"), data)
+
     def _find_run_dir(self, execution_id: str) -> Optional[str]:
         """Locate the run directory for a given execution UUID."""
         ws_root = os.path.join(self._root, "workspaces")
@@ -197,6 +210,7 @@ class LocalBackend:
             "backend": execution.backend,
             "terraform_version": execution.terraform_version,
             "duration_seconds": execution.duration_seconds,
+            "sentinel_result": getattr(execution, "sentinel_result", None),
         }
 
     @staticmethod

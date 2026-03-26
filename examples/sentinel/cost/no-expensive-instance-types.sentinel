@@ -1,0 +1,31 @@
+# no-expensive-instance-types.sentinel
+#
+# WHAT  : Bloquea siempre la creación de instancias de familias de
+#         muy alto coste: p (GPU ML), x (memoria extrema), u (ultra-high).
+# WHY   : Estas instancias pueden generar facturas de miles de dólares
+#         al día; requieren aprobación manual fuera de IaC.
+# LEVEL : hard-mandatory
+
+import "tfplan/v2" as tfplan
+
+# Prefijos de familia que requieren aprobación manual
+forbidden_families = ["p2.", "p3.", "p4d.", "x1.", "x2.", "u-"]
+
+ec2_instances = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_instance" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+is_forbidden = func(instance_type) {
+  return any forbidden_families as prefix {
+    strings.has_prefix(instance_type, prefix)
+  }
+}
+
+violations = filter ec2_instances as _, inst {
+  is_forbidden(inst.change.after.instance_type else "")
+}
+
+main = rule {
+  length(violations) is 0
+}

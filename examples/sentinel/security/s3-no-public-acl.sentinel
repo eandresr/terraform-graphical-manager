@@ -1,0 +1,31 @@
+# s3-no-public-acl.sentinel
+#
+# WHAT  : Prohíbe que cualquier bucket S3 tenga una ACL pública
+#         (public-read, public-read-write, authenticated-read).
+# WHY   : Los buckets públicos son la causa más frecuente de filtraciones
+#         de datos en AWS.
+# LEVEL : hard-mandatory (no se puede omitir)
+
+import "tfplan/v2" as tfplan
+
+# ACLs que exponen datos
+forbidden_acls = [
+  "public-read",
+  "public-read-write",
+  "authenticated-read",
+]
+
+# Recoge todos los recursos aws_s3_bucket que se van a crear o modificar
+s3_buckets = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_s3_bucket" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+# Comprueba que ninguno tiene una ACL prohibida
+violations = filter s3_buckets as _, bucket {
+  bucket.change.after.acl in forbidden_acls
+}
+
+main = rule {
+  length(violations) is 0
+}

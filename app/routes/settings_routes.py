@@ -5,6 +5,7 @@ import os
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash
 
 from app.version_manager import discover_versions, get_system_version
+from app.sentinel_runner import sentinel_available, discover_policy_sets, get_sentinel_binary
 
 settings_bp = Blueprint("settings", __name__)
 
@@ -87,12 +88,19 @@ def settings_page():
     available_versions = discover_versions(config.terraform_versions_folder)
     backend_status = _get_backend_status()
 
+    sentinel_bin = get_sentinel_binary(config.sentinel_cli_path)
+    sentinel_ok = sentinel_available(config.sentinel_cli_path)
+    global_policy_sets = discover_policy_sets(config.sentinel_global_policies)
+
     return render_template(
         "settings.html",
         config=config,
         system_version=system_version,
         available_versions=available_versions,
         backend_status=backend_status,
+        sentinel_available=sentinel_ok,
+        sentinel_binary=sentinel_bin,
+        global_policy_sets=global_policy_sets,
     )
 
 
@@ -123,6 +131,21 @@ def settings_save():
 
     default_version = data.get("default_version", "system").strip()
     updates["terraform.default_version"] = default_version
+
+    # --- Sentinel ---
+    sentinel_cli_path = data.get("sentinel_cli_path", "").strip()
+    updates["sentinel.cli_path"] = sentinel_cli_path
+
+    sentinel_global_policies = data.get("sentinel_global_policies", "").strip()
+    updates["sentinel.global_policies"] = sentinel_global_policies
+
+    updates["sentinel.enforce_on_plan"] = (
+        "true" if data.get("sentinel_enforce_on_plan") == "1" else "false"
+    )
+    updates["sentinel.enforce_on_apply"] = (
+        "true" if data.get("sentinel_enforce_on_apply") == "1" else "false"
+    )
+    updates["sentinel.active_policy_sets"] = data.get("sentinel_active_policy_sets", "").strip()
 
     # --- Portal lock password ---
     if data.get("remove_lock_password") == "1":

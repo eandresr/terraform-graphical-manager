@@ -1,0 +1,48 @@
+# tls-minimum-version.sentinel
+#
+# WHAT  : Obliga a que los load balancers (ALB/NLB) y CloudFront
+#         usen como mínimo TLS 1.2.
+# WHY   : TLS 1.0 y 1.1 tienen vulnerabilidades conocidas (POODLE, BEAST).
+#         PCI-DSS 3.2 exige TLS >= 1.2.
+# LEVEL : soft-mandatory (se puede omitir con justificación)
+
+import "tfplan/v2" as tfplan
+
+# Políticas SSL de ALB que aceptan TLS < 1.2
+insecure_ssl_policies = [
+  "ELBSecurityPolicy-2015-05",
+  "ELBSecurityPolicy-TLS-1-0-2015-04",
+  "ELBSecurityPolicy-TLS-1-1-2017-01",
+]
+
+# ── ALB / HTTPS listeners ──────────────────────────────────────────────
+alb_listeners = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_alb_listener" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update") and
+  rc.change.after.protocol is "HTTPS"
+}
+
+alb_violations = filter alb_listeners as _, l {
+  l.change.after.ssl_policy in insecure_ssl_policies
+}
+
+# ── CloudFront distributions ───────────────────────────────────────────
+cf_dists = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_cloudfront_distribution" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+insecure_viewer = func(dist) {
+  vc = dist.change.after.viewer_certificate else []
+  if length(vc) is 0 { return false }
+  return (vc[0].minimum_protocol_version else "TLSv1") in ["SSLv3", "TLSv1", "TLSv1_2016", "TLSv1.1_2016"]
+}
+
+cf_violations = filter cf_dists as _, dist {
+  insecure_viewer(dist)
+}
+
+main = rule {
+  length(alb_violations) is 0 and
+  length(cf_violations) is 0
+}
