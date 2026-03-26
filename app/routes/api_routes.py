@@ -83,6 +83,43 @@ def submit_run(workspace_id: str):
             pinned_version = config.default_terraform_version
     tf_binary = get_terraform_binary(pinned_version, config.terraform_versions_folder)
 
+    # Sentinel enforcement gate — block apply if enforcement is on and last check failed
+    if command == "apply":
+        try:
+            s_ws_cfg = get_backend().get_workspace_config(workspace_id)
+            enforce = (
+                s_ws_cfg.get("sentinel_enforce_on_apply", False)
+                or config.sentinel_enforce_on_apply
+            )
+        except Exception:
+            enforce = config.sentinel_enforce_on_apply
+        if enforce:
+            try:
+                s_backend = get_backend()
+                if hasattr(s_backend, "get_sentinel_last_result"):
+                    last_sentinel = s_backend.get_sentinel_last_result(workspace_id)
+                    if not last_sentinel or not last_sentinel.get("passed", False):
+                        return jsonify({
+                            "ok": False,
+                            "error": (
+                                "Sentinel policy check must pass before applying. "
+                                "Use the Apply Preview to run a Sentinel check first."
+                            ),
+                        }), 403
+                else:
+                    return jsonify({
+                        "ok": False,
+                        "error": (
+                            "Sentinel enforcement is enabled but the backend "
+                            "does not support result persistence."
+                        ),
+                    }), 400
+            except Exception as s_exc:
+                return jsonify({
+                    "ok": False,
+                    "error": f"Sentinel verification failed: {s_exc}",
+                }), 500
+
     execution = Execution(
         workspace_id=workspace_id,
         workspace_path=workspace["abs_path"],
@@ -468,6 +505,7 @@ def get_workspace_sentinel_config(workspace_id: str):
         "extra_policy_sets": extra_sets,
         "active_global_sets": ws_cfg.get("sentinel_active_global_sets"),
         "active_extra_sets": ws_cfg.get("sentinel_active_extra_sets"),
+        "sentinel_enforce_on_apply": ws_cfg.get("sentinel_enforce_on_apply", False),
     })
 
 
@@ -499,6 +537,9 @@ def set_workspace_sentinel_config(workspace_id: str):
             ws_cfg["sentinel_active_extra_sets"] = active_extra_sets
         else:
             ws_cfg.pop("sentinel_active_extra_sets", None)
+        enforce_on_apply = body.get("sentinel_enforce_on_apply")
+        if isinstance(enforce_on_apply, bool):
+            ws_cfg["sentinel_enforce_on_apply"] = enforce_on_apply
         backend.set_workspace_config(workspace_id, ws_cfg)
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500

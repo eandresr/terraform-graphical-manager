@@ -103,7 +103,7 @@
           Plan
         </button>
 
-        <button @click="openApplyModal()"
+        <button @click="openApplyPreview()"
                 class="btn-primary text-sm">
           <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
@@ -669,6 +669,29 @@
           </p>
         </div>
 
+        <!-- Block apply if Sentinel fails toggle -->
+        <div class="pt-3 border-t border-gray-100">
+          <label class="flex items-start space-x-3 cursor-pointer group">
+            <div class="relative flex-shrink-0 mt-0.5">
+              <input type="checkbox" x-model="sentinelEnforceOnApply" class="sr-only peer">
+              <div class="w-9 h-5 rounded-full transition-colors
+                          bg-gray-200 peer-checked:bg-purple-600
+                          peer-focus:ring-2 peer-focus:ring-purple-300"></div>
+              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow
+                          transition-transform peer-checked:translate-x-4"></div>
+            </div>
+            <div>
+              <p class="text-sm font-medium text-gray-800 group-hover:text-gray-900">
+                Block apply if Sentinel check fails
+              </p>
+              <p class="text-xs text-gray-500 mt-0.5">
+                When enabled, the Apply Preview will automatically run all applicable Sentinel
+                policies and prevent applying if any hard-mandatory or soft-mandatory check fails.
+              </p>
+            </div>
+          </label>
+        </div>
+
         <!-- Detected extra policy sets (with checkboxes) -->
         <template x-if="sentinelExtraSets.length">
           <div class="mt-2">
@@ -951,6 +974,460 @@
   </div>
 
   <!-- ================================================================
+       APPLY PREVIEW MODAL
+       ================================================================ -->
+  <div x-show="applyPreviewOpen"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+       @keydown.escape.window="if (applyPreviewStep !== 'applying') applyPreviewOpen = false">
+
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+         @click="if (applyPreviewStep !== 'applying') applyPreviewOpen = false"></div>
+
+    <!-- Modal card -->
+    <div class="relative bg-white rounded-none sm:rounded-2xl shadow-2xl
+                w-full sm:max-w-4xl max-h-screen sm:max-h-[90vh] flex flex-col z-10 overflow-hidden"
+         @click.stop>
+
+      <!-- Header -->
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+        <div class="flex items-center space-x-3">
+          <svg class="w-5 h-5 text-tf-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2
+                     M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 8l2 2 4-4"/>
+          </svg>
+          <h2 class="text-lg font-semibold text-gray-900">Apply Preview</h2>
+        </div>
+
+        <!-- Step indicator -->
+        <div class="hidden sm:flex items-center space-x-1 text-xs font-medium">
+          <span class="flex items-center space-x-1.5"
+                :class="applyPreviewStep !== 'idle' ? 'text-tf-600' : 'text-gray-400'">
+            <span class="w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  :class="['plan_ready','plan_failed','sentinel_running','sentinel_blocked','ready','applying'].includes(applyPreviewStep)
+                           ? 'bg-tf-600 border-tf-600 text-white'
+                           : applyPreviewStep === 'planning'
+                               ? 'border-tf-600 text-tf-600'
+                               : 'border-gray-300 text-gray-400'">1</span>
+            <span>Plan</span>
+          </span>
+          <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+          </svg>
+          <span class="flex items-center space-x-1.5"
+                :class="['plan_ready','sentinel_running','sentinel_blocked','ready','applying'].includes(applyPreviewStep) ? 'text-tf-600' : 'text-gray-400'">
+            <span class="w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  :class="['sentinel_running','sentinel_blocked','ready','applying'].includes(applyPreviewStep)
+                           ? 'bg-tf-600 border-tf-600 text-white'
+                           : applyPreviewStep === 'plan_ready'
+                               ? 'border-tf-600 text-tf-600'
+                               : 'border-gray-300 text-gray-400'">2</span>
+            <span>Review</span>
+          </span>
+          <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+          </svg>
+          <span class="flex items-center space-x-1.5"
+                :class="applyPreviewStep === 'applying' ? 'text-tf-600' : 'text-gray-400'">
+            <span class="w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  :class="applyPreviewStep === 'applying'
+                           ? 'bg-tf-600 border-tf-600 text-white'
+                           : 'border-gray-300 text-gray-400'">3</span>
+            <span>Apply</span>
+          </span>
+        </div>
+
+        <button @click="if (applyPreviewStep !== 'applying') applyPreviewOpen = false"
+                :disabled="applyPreviewStep === 'applying'"
+                class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100
+                       disabled:opacity-40 disabled:cursor-not-allowed">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Scrollable content -->
+      <div class="flex-1 overflow-y-auto divide-y divide-gray-100">
+
+        <!-- §1  Plan log -->
+        <div x-show="applyPreviewStep === 'planning' || (applyPlanLogs.length > 0)" class="p-5">
+          <div class="flex items-center space-x-2 mb-3">
+            <svg x-show="applyPreviewStep === 'planning'"
+                 class="w-4 h-4 text-tf-500 animate-spin flex-shrink-0"
+                 fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581
+                       m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <svg x-show="applyPreviewStep !== 'planning' && applyPreviewStep !== 'plan_failed' && applyPreviewStep !== 'idle'"
+                 class="w-4 h-4 text-green-500 flex-shrink-0"
+                 fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+            </svg>
+            <svg x-show="applyPreviewStep === 'plan_failed'"
+                 class="w-4 h-4 text-red-500 flex-shrink-0"
+                 fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            <span class="text-sm font-semibold text-gray-700"
+                  x-text="applyPreviewStep === 'planning' ? 'Running terraform plan…'
+                         : applyPreviewStep === 'plan_failed' ? 'Plan failed'
+                         : 'Plan complete'"></span>
+          </div>
+          <div class="bg-gray-950 rounded-xl font-mono text-xs text-green-400 p-4 h-52 overflow-y-auto leading-5"
+               x-ref="applyPlanLogEl">
+            <template x-for="(line, idx) in applyPlanLogs" :key="idx">
+              <div x-text="line"></div>
+            </template>
+            <div x-show="!applyPlanLogs.length" class="text-gray-600">Waiting for plan output…</div>
+          </div>
+        </div>
+
+        <!-- Plan failed detail -->
+        <div x-show="applyPreviewStep === 'plan_failed'" class="p-5">
+          <div class="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
+            <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5"
+                 fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div>
+              <p class="text-sm font-semibold text-red-800">Plan Failed</p>
+              <p class="text-xs text-red-700 mt-0.5"
+                 x-text="applyPreviewError || 'The plan encountered an error. Check the log above.'"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- §2  Plan diff -->
+        <template x-if="applyPlanSummary">
+          <div class="p-5">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center space-x-2">
+              <svg class="w-4 h-4 text-gray-500 flex-shrink-0"
+                   fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586
+                         a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              <span>Plan Summary</span>
+            </h3>
+
+            <!-- Counts bar -->
+            <div class="flex flex-wrap items-center gap-4 bg-gray-50 rounded-xl px-4 py-3 mb-4">
+              <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0"></span>
+                <span class="text-sm">
+                  <span class="font-bold text-green-700" x-text="applyPlanSummary.counts.create"></span>
+                  to create
+                </span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-yellow-500 flex-shrink-0"></span>
+                <span class="text-sm">
+                  <span class="font-bold text-yellow-700" x-text="applyPlanSummary.counts.update"></span>
+                  to update
+                </span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                <span class="text-sm">
+                  <span class="font-bold text-red-700" x-text="applyPlanSummary.counts.delete"></span>
+                  to destroy
+                </span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-orange-600 flex-shrink-0"></span>
+                <span class="text-sm">
+                  <span class="font-bold text-orange-700" x-text="applyPlanSummary.counts.replace"></span>
+                  to replace
+                </span>
+              </div>
+            </div>
+
+            <!-- Resource changes -->
+            <div x-show="applyPlanSummary.changes && applyPlanSummary.changes.length" class="space-y-1.5">
+              <template x-for="change in applyPlanSummary.changes" :key="change.address">
+                <div x-data="{ expanded: false }" class="border border-gray-200 rounded-lg overflow-hidden">
+                  <div class="flex items-center space-x-3 px-4 py-2.5 cursor-pointer
+                               hover:bg-gray-50 select-none"
+                       @click="expanded = !expanded">
+                    <span class="font-mono font-bold text-sm w-5 text-center flex-shrink-0"
+                          :class="{
+                            'text-green-600': change.action === 'create',
+                            'text-yellow-600': change.action === 'update',
+                            'text-red-600': change.action === 'delete' || change.action === 'replace',
+                            'text-gray-400': change.action === 'no-op',
+                          }"
+                          x-text="change.symbol"></span>
+                    <span class="font-mono text-sm text-gray-900 flex-1 truncate"
+                          x-text="change.address"></span>
+                    <span class="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
+                          :class="{
+                            'bg-green-100 text-green-800': change.action === 'create',
+                            'bg-yellow-100 text-yellow-800': change.action === 'update',
+                            'bg-red-100 text-red-800': change.action === 'delete' || change.action === 'replace',
+                            'bg-gray-100 text-gray-600': change.action === 'no-op',
+                          }"
+                          x-text="change.label"></span>
+                    <svg class="w-3.5 h-3.5 text-gray-300 transition-transform flex-shrink-0"
+                         :class="expanded ? 'rotate-90' : ''"
+                         fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                  </div>
+                  <div x-show="expanded" x-transition
+                       class="bg-gray-950 font-mono text-xs overflow-x-auto">
+                    <template x-for="dl in change.diff_lines" :key="dl.key">
+                      <div class="flex items-start px-4 py-0.5"
+                           :class="{
+                             'bg-green-950/50 text-green-300': dl.type === 'add',
+                             'bg-red-950/50 text-red-300': dl.type === 'remove',
+                             'bg-yellow-950/30 text-yellow-200': dl.type === 'change',
+                           }">
+                        <span class="w-4 flex-shrink-0 mr-2 font-bold text-gray-400"
+                              x-text="dl.type === 'add' ? '+' : (dl.type === 'remove' ? '-' : '~')"></span>
+                        <span class="text-gray-400 mr-2" x-text="dl.key + ':'"></span>
+                        <template x-if="dl.type === 'change'">
+                          <span>
+                            <span class="line-through text-red-400 mr-2" x-text="dl.before"></span>
+                            <span class="text-green-400" x-text="dl.after"></span>
+                          </span>
+                        </template>
+                        <template x-if="dl.type === 'add'">
+                          <span class="text-green-300" x-text="dl.after"></span>
+                        </template>
+                        <template x-if="dl.type === 'remove'">
+                          <span class="text-red-300" x-text="dl.before"></span>
+                        </template>
+                      </div>
+                    </template>
+                    <div x-show="!change.diff_lines || !change.diff_lines.length"
+                         class="px-4 py-2 text-gray-500">No attribute-level changes.</div>
+                  </div>
+                </div>
+              </template>
+            </div>
+            <div x-show="!applyPlanSummary.changes || !applyPlanSummary.changes.length"
+                 class="text-sm text-gray-400 italic">
+              No resource changes in this plan.
+            </div>
+          </div>
+        </template>
+
+        <!-- §3  Sentinel section (shown when enforced or when result available) -->
+        <template x-if="sentinelEnforceOnApply || applySentinelResult">
+          <div class="p-5">
+            <!-- Sentinel heading row -->
+            <div class="flex items-center space-x-2 mb-3">
+              <svg x-show="applyPreviewStep === 'sentinel_running'"
+                   class="w-4 h-4 text-purple-500 animate-spin flex-shrink-0"
+                   fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581
+                         m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              <svg x-show="applySentinelResult && applySentinelResult.passed"
+                   class="w-4 h-4 text-green-500 flex-shrink-0"
+                   fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <svg x-show="applySentinelResult && !applySentinelResult.passed"
+                   class="w-4 h-4 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414
+                         L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293
+                         a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414
+                         L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+              </svg>
+              <svg x-show="!applySentinelResult && applyPreviewStep !== 'sentinel_running'"
+                   class="w-4 h-4 text-purple-400 flex-shrink-0"
+                   fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944
+                         a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9
+                         c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622
+                         0-1.042-.133-2.052-.382-3.016z"/>
+              </svg>
+              <span class="text-sm font-semibold text-gray-700">
+                <span x-show="applyPreviewStep === 'sentinel_running'">Running Sentinel checks…</span>
+                <span x-show="applyPreviewStep !== 'sentinel_running' && applySentinelResult && applySentinelResult.passed">
+                  Sentinel: All policies passed
+                </span>
+                <span x-show="applyPreviewStep !== 'sentinel_running' && applySentinelResult && !applySentinelResult.passed">
+                  Sentinel: Policy check failed
+                </span>
+                <span x-show="applyPreviewStep !== 'sentinel_running' && !applySentinelResult">
+                  Sentinel policies will run automatically after the plan completes
+                </span>
+              </span>
+            </div>
+
+            <!-- Sentinel CLI error -->
+            <template x-if="applySentinelResult && applySentinelResult.error">
+              <div class="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 mb-3"
+                   x-text="applySentinelResult.error"></div>
+            </template>
+
+            <!-- Per-policy results -->
+            <template x-if="applySentinelResult && applySentinelResult.results && applySentinelResult.results.length">
+              <div class="space-y-1.5">
+                <template x-for="(r, idx) in applySentinelResult.results" :key="idx">
+                  <div x-data="{ expanded: false }"
+                       class="border rounded-lg overflow-hidden"
+                       :class="r.passed
+                                 ? 'border-green-200'
+                                 : (r.enforcement_level === 'advisory' ? 'border-amber-200' : 'border-red-200')">
+                    <div class="flex items-center space-x-3 px-4 py-2.5 cursor-pointer select-none"
+                         :class="r.passed
+                                   ? 'bg-green-50 hover:bg-green-100'
+                                   : (r.enforcement_level === 'advisory'
+                                       ? 'bg-amber-50 hover:bg-amber-100'
+                                       : 'bg-red-50 hover:bg-red-100')"
+                         @click="expanded = !expanded">
+                      <template x-if="r.passed">
+                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414
+                                   L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                clip-rule="evenodd"/>
+                        </svg>
+                      </template>
+                      <template x-if="!r.passed">
+                        <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414
+                                   L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293
+                                   a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414
+                                   L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                        </svg>
+                      </template>
+                      <span class="font-mono text-sm flex-1 truncate"
+                            :class="r.passed ? 'text-green-900' : 'text-red-900'"
+                            x-text="r.policy"></span>
+                      <span class="text-xs font-mono text-gray-500 truncate max-w-[8rem]"
+                            x-text="r.policy_set"></span>
+                      <span class="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
+                            :class="{
+                              'bg-gray-100 text-gray-600': r.enforcement_level === 'advisory',
+                              'bg-amber-100 text-amber-700': r.enforcement_level === 'soft-mandatory',
+                              'bg-red-100 text-red-700': r.enforcement_level === 'hard-mandatory' || !r.enforcement_level,
+                            }"
+                            x-text="r.enforcement_level || 'hard-mandatory'"></span>
+                      <svg class="w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0"
+                           :class="expanded ? 'rotate-90' : ''"
+                           fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                      </svg>
+                    </div>
+                    <div x-show="expanded" x-transition class="px-4 pb-3">
+                      <div class="bg-gray-950 rounded-lg p-3 font-mono text-xs text-gray-300
+                                  whitespace-pre-wrap overflow-x-auto"
+                           x-text="r.output || '(no output)'"></div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <!-- Blocked banner -->
+            <template x-if="applyPreviewStep === 'sentinel_blocked'">
+              <div class="mt-3 flex items-start space-x-3 bg-red-50 border border-red-300 rounded-xl p-4">
+                <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"
+                     fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M18.364 5.636l-1.414 1.414M5.636 18.364l1.414-1.414
+                           M18.364 18.364l-1.414-1.414M5.636 5.636l1.414 1.414
+                           M12 2v2m0 16v2m10-10h-2M4 12H2"/>
+                </svg>
+                <div>
+                  <p class="text-sm font-semibold text-red-800">Apply Blocked by Sentinel</p>
+                  <p class="text-xs text-red-700 mt-0.5">
+                    One or more mandatory policies failed. Fix the violations above before applying.
+                  </p>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Generic apply error (shown when apply itself failed after confirmation) -->
+        <div x-show="applyPreviewError && applyPreviewStep === 'ready'"
+             class="mx-5 mb-4 mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3
+                    text-sm text-red-700"
+             x-text="applyPreviewError"></div>
+
+      </div><!-- /scrollable content -->
+
+      <!-- Footer -->
+      <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+        <!-- Confirmation checkbox — visible once plan_ready or after sentinel -->
+        <div x-show="['plan_ready','sentinel_running','sentinel_blocked','ready'].includes(applyPreviewStep)"
+             class="mb-4">
+          <label class="flex items-start space-x-3 cursor-pointer"
+                 :class="applyPreviewStep === 'sentinel_blocked' ? 'opacity-50 pointer-events-none' : ''">
+            <input type="checkbox" x-model="applyConfirmedPreview"
+                   :disabled="applyPreviewStep === 'sentinel_blocked'"
+                   class="mt-0.5 w-4 h-4 rounded accent-tf-600 flex-shrink-0">
+            <span class="text-sm text-gray-700">
+              I have reviewed the plan above and confirm that I want to
+              <strong class="text-gray-900">apply these changes</strong>.
+              I understand this will
+              <strong class="text-red-700">modify live infrastructure</strong>.
+            </span>
+          </label>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <p class="text-xs text-gray-400">
+            <span x-show="applyPreviewStep === 'planning'">Planning in progress…</span>
+            <span x-show="applyPreviewStep === 'sentinel_running'">Checking policies…</span>
+            <span x-show="applyPreviewStep === 'sentinel_blocked'">Blocked by policy violations</span>
+            <span x-show="applyPreviewStep === 'ready' && !applyConfirmedPreview">
+              Check the box above to enable Apply
+            </span>
+            <span x-show="applyPreviewStep === 'applying'">Queueing apply…</span>
+            <span x-show="applyPreviewStep === 'plan_failed'">Resolve plan errors to continue</span>
+          </p>
+          <div class="flex items-center space-x-3">
+            <button @click="applyPreviewOpen = false"
+                    :disabled="applyPreviewStep === 'applying'"
+                    class="btn-secondary text-sm disabled:opacity-40">
+              Close
+            </button>
+            <button @click="confirmApply()"
+                    :disabled="!applyConfirmedPreview || applyPreviewStep !== 'ready'"
+                    class="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+              <svg x-show="applyPreviewStep === 'applying'"
+                   class="w-4 h-4 mr-1.5 animate-spin" fill="none" stroke="currentColor"
+                   stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9
+                         m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              <svg x-show="applyPreviewStep !== 'applying'"
+                   class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor"
+                   stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+              Apply Changes
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /modal card -->
+  </div><!-- /apply preview modal -->
+
+  <!-- ================================================================
        EXECUTION MODAL (Plan / Apply)
        ================================================================ -->
   {% include "execution_modal.html" %}
@@ -1010,10 +1487,20 @@ function workspacePage(workspaceId) {
     modalSubmitting: false,
     modalVersion: 'system',
     applyConfirmed: false,
+    // Apply Preview
+    applyPreviewOpen: false,
+    applyPreviewStep: 'idle',  // idle|planning|plan_failed|plan_ready|sentinel_running|sentinel_blocked|ready|applying
+    applyPlanRunId: null,
+    applyPlanSummary: null,
+    applyPlanLogs: [],
+    applyPreviewError: null,
+    applySentinelResult: null,
+    applyConfirmedPreview: false,
     // Sentinel
     sentinelLoading: false,
     sentinelResult: null,
     sentinelError: null,
+    sentinelEnforceOnApply: false,
     sentinelExtraPolicies: SENTINEL_EXTRA_POLICIES_INITIAL,
     sentinelExtraSets: [],
     sentinelGlobalSets: [],
@@ -1077,6 +1564,13 @@ function workspacePage(workspaceId) {
           this.runLogs.push(data.line);
           this.$nextTick(() => {
             const el = document.getElementById('log-output');
+            if (el) el.scrollTop = el.scrollHeight;
+          });
+        }
+        if (data.execution_id === this.applyPlanRunId) {
+          this.applyPlanLogs.push(data.line);
+          this.$nextTick(() => {
+            const el = this.$refs.applyPlanLogEl;
             if (el) el.scrollTop = el.scrollHeight;
           });
         }
@@ -1226,6 +1720,157 @@ function workspacePage(workspaceId) {
       }
     },
 
+    openApplyPreview() {
+      this.applyPreviewOpen = true;
+      this.applyPreviewStep = 'idle';
+      this.applyPlanRunId = null;
+      this.applyPlanSummary = null;
+      this.applyPlanLogs = [];
+      this.applyPreviewError = null;
+      this.applySentinelResult = null;
+      this.applyConfirmedPreview = false;
+      this.modalEnvVars = {};
+      this.startApplyPlan();
+    },
+
+    async startApplyPlan() {
+      this.applyPreviewStep = 'planning';
+      try {
+        const body = {
+          command: 'plan',
+          env_vars: this.modalEnvVars,
+          terraform_version_override: this.pinnedVersion,
+        };
+        const res = await fetch(`/api/workspace/${workspaceId}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (data.execution_id) {
+          this.applyPlanRunId = data.execution_id;
+          this.latestPlanExecId = data.execution_id;
+          this.pollApplyPlan(data.execution_id);
+        } else {
+          this.applyPreviewStep = 'plan_failed';
+          this.applyPreviewError = data.error || 'Failed to start plan.';
+        }
+      } catch (e) {
+        this.applyPreviewStep = 'plan_failed';
+        this.applyPreviewError = e.message;
+      }
+    },
+
+    pollApplyPlan(execId) {
+      const interval = setInterval(async () => {
+        try {
+          const logRes = await fetch(`/api/executions/${execId}/logs`);
+          if (logRes.ok) {
+            const logData = await logRes.json();
+            this.applyPlanLogs = logData.lines || [];
+            this.$nextTick(() => {
+              const el = this.$refs.applyPlanLogEl;
+              if (el) el.scrollTop = el.scrollHeight;
+            });
+          }
+          const statusRes = await fetch(`/api/executions/${execId}`);
+          const statusData = await statusRes.json();
+          if (statusData.status === 'completed' || statusData.status === 'failed') {
+            clearInterval(interval);
+            if (statusData.status === 'completed') {
+              const planRes = await fetch(`/api/executions/${execId}/plan`);
+              if (planRes.ok) {
+                this.applyPlanSummary = await planRes.json();
+                this.planSummary = this.applyPlanSummary;
+              }
+              this.applyPreviewStep = 'plan_ready';
+              this.loadRuns();
+              if (this.sentinelEnforceOnApply) {
+                this.runSentinelForApply();
+              } else {
+                this.applyPreviewStep = 'ready';
+              }
+            } else {
+              const logRes2 = await fetch(`/api/executions/${execId}/logs`);
+              if (logRes2.ok) {
+                const logData2 = await logRes2.json();
+                this.applyPlanLogs = logData2.lines || [];
+              }
+              this.applyPreviewStep = 'plan_failed';
+              this.applyPreviewError = 'Plan failed. Check the log above for details.';
+              this.loadRuns();
+            }
+          }
+        } catch (e) {
+          clearInterval(interval);
+          this.applyPreviewStep = 'plan_failed';
+          this.applyPreviewError = e.message;
+        }
+      }, 2000);
+    },
+
+    async runSentinelForApply() {
+      this.applyPreviewStep = 'sentinel_running';
+      this.applySentinelResult = null;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/sentinel/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          this.applySentinelResult = { passed: false, error: data.error || `HTTP ${res.status}`, results: [] };
+          this.applyPreviewStep = 'sentinel_blocked';
+        } else {
+          this.applySentinelResult = data.result;
+          this.sentinelResult = data.result;
+          const hasBlockingFail = (data.result.results || []).some(
+            r => !r.passed && r.enforcement_level !== 'advisory'
+          );
+          this.applyPreviewStep = hasBlockingFail ? 'sentinel_blocked' : 'ready';
+        }
+      } catch (e) {
+        this.applySentinelResult = { passed: false, error: e.message, results: [] };
+        this.applyPreviewStep = 'sentinel_blocked';
+      }
+    },
+
+    async confirmApply() {
+      this.applyPreviewStep = 'applying';
+      this.applyPreviewError = null;
+      try {
+        const body = {
+          command: 'apply',
+          env_vars: this.modalEnvVars,
+          terraform_version_override: this.pinnedVersion,
+          plan_execution_id: this.applyPlanRunId,
+        };
+        const res = await fetch(`/api/workspace/${workspaceId}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.applyPreviewStep = 'ready';
+          this.applyPreviewError = data.error || `HTTP ${res.status}`;
+          return;
+        }
+        if (data.execution_id) {
+          this.applyPreviewOpen = false;
+          this.activeTab = 'runs';
+          this.selectRun(data.execution_id);
+          this.loadRuns();
+        } else {
+          this.applyPreviewStep = 'ready';
+          this.applyPreviewError = data.error || 'Failed to queue apply.';
+        }
+      } catch (e) {
+        this.applyPreviewStep = 'ready';
+        this.applyPreviewError = e.message;
+      }
+    },
+
     openPlanModal() {
       this.modalCommand = 'plan';
       this.modalVersion = this.pinnedVersion;
@@ -1311,6 +1956,12 @@ function workspacePage(workspaceId) {
           ...ps,
           enabled: activeExtra.length === 0 || activeExtra.includes(ps.name),
         }));
+        // Per-workspace enforce_on_apply; fall back to global setting
+        if (wsD.sentinel_enforce_on_apply !== undefined && wsD.sentinel_enforce_on_apply !== null) {
+          this.sentinelEnforceOnApply = wsD.sentinel_enforce_on_apply;
+        } else {
+          this.sentinelEnforceOnApply = globalD.enforce_on_apply || false;
+        }
         // Restore last run result (only if not currently running)
         if (lastD.ok && lastD.result && !this.sentinelLoading) {
           this.sentinelResult = lastD.result;
@@ -1339,6 +1990,7 @@ function workspacePage(workspaceId) {
             extra_policies: this.sentinelExtraPolicies,
             active_global_sets: activeGlobalSets,
             active_extra_sets: activeExtraSets,
+            sentinel_enforce_on_apply: this.sentinelEnforceOnApply,
           }),
         });
         const data = await res.json();
