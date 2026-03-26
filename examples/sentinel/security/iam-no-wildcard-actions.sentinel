@@ -1,0 +1,37 @@
+# iam-no-wildcard-actions.sentinel
+#
+# WHAT  : Impide que políticas IAM inline o gestionadas contengan
+#         Action = "*" o "service:*" (wildcards amplios).
+# WHY   : El principio de mínimo privilegio es la base de IAM.
+#         Un wildcard convierte cualquier rol en administrador efectivo.
+# LEVEL : hard-mandatory
+
+import "tfplan/v2" as tfplan
+
+iam_policy_types = [
+  "aws_iam_policy",
+  "aws_iam_role_policy",
+  "aws_iam_user_policy",
+  "aws_iam_group_policy",
+]
+
+iam_resources = filter tfplan.resource_changes as _, rc {
+  rc.type in iam_policy_types and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+has_wildcard_action = func(resource) {
+  policy_doc    = resource.change.after.policy else "{}"
+  has_star      = policy_doc contains "\"*\""
+  has_action    = policy_doc contains "\"Action\""
+  has_notaction = policy_doc contains "\"NotAction\""
+  return has_star and (has_action or has_notaction)
+}
+
+violations = filter iam_resources as _, r {
+  has_wildcard_action(r)
+}
+
+main = rule {
+  length(violations) is 0
+}

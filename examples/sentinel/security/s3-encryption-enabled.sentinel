@@ -1,0 +1,28 @@
+# s3-encryption-enabled.sentinel
+#
+# WHAT  : Obliga a que todos los buckets S3 tengan Server-Side Encryption
+#         habilitada mediante una regla de cifrado por defecto.
+# WHY   : Datos en reposo deben estar cifrados; PCI-DSS, HIPAA y CIS AWS
+#         Benchmark lo exigen.
+# LEVEL : hard-mandatory
+
+import "tfplan/v2" as tfplan
+
+s3_buckets = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_s3_bucket" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+# Un bucket cumple si define al menos una regla de server_side_encryption_configuration
+bucket_has_encryption = func(bucket) {
+  sse = bucket.change.after.server_side_encryption_configuration else []
+  return length(sse) > 0
+}
+
+violations = filter s3_buckets as _, bucket {
+  not bucket_has_encryption(bucket)
+}
+
+main = rule {
+  length(violations) is 0
+}

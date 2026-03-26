@@ -340,7 +340,97 @@ The sidebar renders group folders as collapsible nodes and workspace leaves as l
 
 ---
 
-## 🔌 REST API
+## �️ Sentinel Policy Integration
+
+TGM integrates with the [HashiCorp Sentinel](https://developer.hashicorp.com/sentinel) policy-as-code framework.  
+Sentinel policies are evaluated against `terraform plan` output before an apply is allowed.
+
+### Policy set layout
+
+Each **policy set** is a directory containing one or more `.sentinel` policy files and an optional `sentinel.hcl` configuration:
+
+```
+/opt/sentinel-policies/
+├── base-compliance/
+│   ├── require-tags.sentinel
+│   ├── no-public-s3.sentinel
+│   └── sentinel.hcl          ← optional enforcement config
+└── network-rules/
+    └── restrict-regions.sentinel
+```
+
+`sentinel.hcl` lets you override the enforcement level per policy:
+
+```hcl
+policy "require-tags" {
+  enforcement_level = "hard-mandatory"
+}
+
+policy "no-public-s3" {
+  enforcement_level = "soft-mandatory"
+}
+```
+
+| Enforcement level | Behaviour |
+|---|---|
+| `hard-mandatory` | Policy **must** pass. Blocks apply entirely if it fails. |
+| `soft-mandatory` | Policy failure blocks apply by default but can be overridden. |
+| `advisory` | Policy failure is logged as a warning but never blocks. |
+
+Default enforcement level (when `sentinel.hcl` is absent or the policy is not listed) is `hard-mandatory`.
+
+### Configuring Sentinel in `tfg.conf`
+
+```ini
+[sentinel]
+# Full path to the Sentinel CLI binary. Leave blank to use 'sentinel' on PATH.
+cli_path =
+
+# Directory of global policy sets applied to every workspace.
+global_policies = /opt/sentinel-policies
+
+# Automatically run Sentinel after every terraform plan.
+enforce_on_plan = true
+
+# If true, block terraform apply when any non-advisory policy fails.
+# Requires enforce_on_plan = true.
+enforce_on_apply = true
+```
+
+These options can also be changed through the **Settings UI** (`/settings` → *Sentinel Policy Integration*).
+
+### Workspace-level extra policies
+
+Each workspace can have an additional policy sets directory configured from the **Sentinel tab** in the workspace view.  
+Extra workspace policies are checked **in addition to** the global policy sets.
+
+### How plan evaluation works
+
+TGM uses the standard Terraform Cloud `tfplan/v2` mock pattern so that policies written for Terraform Cloud work without modification.  
+For each policy set, a temporary `run.hcl` is generated:
+
+```hcl
+mock "tfplan/v2" {
+  module {
+    source = "/tmp/<uuid>/mock-tfplan.json"
+  }
+}
+```
+
+Then `sentinel apply -config=run.hcl <policy>.sentinel` is invoked for each policy file.
+
+### REST API — Sentinel endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/sentinel/config` | Global sentinel configuration + detected policy sets |
+| `GET` | `/api/workspace/{id}/sentinel/config` | Workspace extra policies + discovered sets |
+| `POST` | `/api/workspace/{id}/sentinel/config` | Save workspace extra policies path |
+| `POST` | `/api/workspace/{id}/sentinel/run` | Run Sentinel check against latest plan |
+
+---
+
+## �🔌 REST API
 
 All UI features are powered by a JSON REST API. Base path: `/api/`
 

@@ -1,0 +1,39 @@
+# environment-tag-valid-values.sentinel
+#
+# WHAT  : La tag "Environment" solo puede tomar valores del conjunto
+#         aprobado: dev, staging, prod, sandbox.
+# WHY   : Valores libres ("production", "PRD", "test123") rompen los
+#         filtros de facturación y los pipelines de automatización.
+# LEVEL : soft-mandatory
+
+import "tfplan/v2" as tfplan
+import "strings"
+
+allowed_environments = ["dev", "staging", "prod", "sandbox"]
+
+taggable_types = [
+  "aws_instance", "aws_db_instance", "aws_s3_bucket", "aws_vpc",
+  "aws_subnet", "aws_security_group", "aws_lb", "aws_eks_cluster",
+  "aws_lambda_function", "azurerm_virtual_machine",
+  "azurerm_resource_group", "google_compute_instance",
+]
+
+resources = filter tfplan.resource_changes as _, rc {
+  rc.type in taggable_types and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+env_tag_invalid = func(rc) {
+  tags = rc.change.after.tags else {}
+  env  = tags["Environment"] else null
+  if env is null { return false }
+  return not (strings.to_lower(env) in allowed_environments)
+}
+
+violations = filter resources as _, rc {
+  env_tag_invalid(rc)
+}
+
+main = rule {
+  length(violations) is 0
+}

@@ -43,6 +43,10 @@ class Execution:
         self.backend = backend
         self.plan_execution_id = plan_execution_id
 
+        # Sentinel
+        self.sentinel_result: Optional[Dict[str, Any]] = None  # populated after plan
+        self.sentinel_policies_override: Optional[str] = None  # ws-level extra policies
+
         self.timestamp = datetime.datetime.utcnow().isoformat()
         self.status = ExecutionStatus.QUEUED
         self.logs: List[str] = []
@@ -81,6 +85,7 @@ class Execution:
             "terraform_version": self.terraform_version,
             "duration_seconds": self.duration_seconds,
             "log_lines": len(self.logs),
+            "sentinel_result": self.sentinel_result,
         }
 
     @classmethod
@@ -103,6 +108,8 @@ class Execution:
         obj.terraform_version = meta.get("terraform_version")
         obj.duration_seconds = meta.get("duration_seconds")
         obj.terraform_binary = meta.get("terraform_binary")
+        obj.sentinel_result = meta.get("sentinel_result")
+        obj.sentinel_policies_override = None
         obj._workdir = None
         obj._canceled = threading.Event()
         obj._lock = threading.Lock()
@@ -251,6 +258,14 @@ class ExecutionQueue:
             elif execution.command == "apply":
                 self._do_apply(runner, execution, workdir, log)
 
+            # Sentinel check (after plan JSON is available)
+            from flask import current_app
+            try:
+                app_config = current_app.config["TFG_CONFIG"]
+            except RuntimeError:
+                app_config = None
+            self._run_sentinel(execution, app_config, log)
+
             if execution.is_canceled():
                 execution.status = ExecutionStatus.CANCELED
             else:
@@ -292,6 +307,66 @@ class ExecutionQueue:
         plan_json = runner.show_json(plan_binary, log)
         execution.plan_json = plan_json
         execution.plan_binary_path = plan_binary
+
+    # ------------------------------------------------------------------
+
+    def _run_sentinel(
+        self,
+        execution: Execution,
+        app_config,
+        log,
+    ) -> None:
+        """Run Sentinel policy checks if configured and plan JSON is available."""
+        if app_config is None:
+            return
+        if not execution.plan_json:
+            return
+
+        enforce_plan = getattr(app_config, "sentinel_enforce_on_plan", False)
+        enforce_apply = getattr(app_config, "sentinel_enforce_on_apply", False)
+
+        # Only run after plan (and apply if enforce_on_apply is set)
+        should_run = False
+        if execution.command == "plan" and enforce_plan:
+            should_run = True
+        elif execution.command == "apply" and (enforce_plan or enforce_apply):
+            should_run = True
+        # Always run if the execution has a workspace-level override
+        if execution.sentinel_policies_override:
+            should_run = True
+
+        if not should_run:
+            return
+
+        from app.sentinel_runner import SentinelRunner, get_sentinel_binary, sentinel_available
+        cli_path = getattr(app_config, "sentinel_cli_path", "")
+        binary = get_sentinel_binary(cli_path)
+
+        if not sentinel_available(cli_path):
+            log("[Sentinel] WARNING: sentinel binary not found — skipping checks.")
+            return
+
+        global_policies = getattr(app_config, "sentinel_global_policies", "")
+        sentinel = SentinelRunner(
+            sentinel_binary=binary,
+            global_policies_path=global_policies or None,
+            workspace_extra_policies=execution.sentinel_policies_override or None,
+        )
+
+        log("=== sentinel check ===")
+        sentinel_result = sentinel.check_plan(
+            execution.plan_json,
+            log_cb=log,
+        )
+        execution.sentinel_result = sentinel_result
+
+        if not sentinel_result["passed"]:
+            enforce_apply_flag = getattr(app_config, "sentinel_enforce_on_apply", False)
+            if execution.command == "apply" and enforce_apply_flag:
+                raise RuntimeError(
+                    "Sentinel policy check failed — apply blocked. "
+                    "Review policy violations above."
+                )
 
     def _do_apply(
         self,

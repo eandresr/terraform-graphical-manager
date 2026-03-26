@@ -1,0 +1,35 @@
+# no-public-ip-on-launch.sentinel
+#
+# WHAT  : Impide que subnets tengan map_public_ip_on_launch = true
+#         y que instancias EC2 reciban una IP pública directamente
+#         (sin pasar por un Load Balancer o NAT Gateway).
+# WHY   : Las IPs públicas directas en instancias aumentan la
+#         superficie de ataque y dificultan el control de tráfico.
+# LEVEL : soft-mandatory
+
+import "tfplan/v2" as tfplan
+
+# ── Subnets con IP pública automática ─────────────────────────────────
+subnets = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_subnet" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+subnet_violations = filter subnets as _, sn {
+  sn.change.after.map_public_ip_on_launch else false
+}
+
+# ── Instancias EC2 con IP pública explícita ────────────────────────────
+instances = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_instance" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+instance_violations = filter instances as _, inst {
+  inst.change.after.associate_public_ip_address else false
+}
+
+main = rule {
+  length(subnet_violations) is 0 and
+  length(instance_violations) is 0
+}

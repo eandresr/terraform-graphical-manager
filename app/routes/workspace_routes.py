@@ -97,11 +97,28 @@ def workspace_detail(workspace_id: str):
     from app.env_validator import validate_credentials
     cred_status = validate_credentials(workspace["providers"])
 
+    from app.storage import get_backend
+    from app.sentinel_runner import discover_policy_sets
+    try:
+        ws_cfg = get_backend().get_workspace_config(workspace_id)
+    except Exception:
+        ws_cfg = {}
+
+    config = current_app.config["TFG_CONFIG"]
+    sentinel_extra_policies = ws_cfg.get("sentinel_extra_policies", "")
+    sentinel_extra_sets = discover_policy_sets(sentinel_extra_policies) if sentinel_extra_policies else []
+    global_policy_sets = discover_policy_sets(config.sentinel_global_policies)
+
     return render_template(
         "workspace.html",
         workspace=workspace,
         cred_status=cred_status,
         active_tab=request.args.get("tab", "overview"),
+        sentinel_extra_policies=sentinel_extra_policies,
+        sentinel_extra_sets=sentinel_extra_sets,
+        global_policy_sets=global_policy_sets,
+        sentinel_enforce_on_plan=config.sentinel_enforce_on_plan,
+        sentinel_enforce_on_apply=config.sentinel_enforce_on_apply,
     )
 
 

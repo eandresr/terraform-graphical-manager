@@ -86,6 +86,15 @@
         </button>
         {% endif %}
 
+        <button @click="switchTab('sentinel')"
+                class="btn-secondary text-sm">
+          <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          Sentinel
+        </button>
+
         <button @click="openPlanModal()"
                 class="btn-secondary text-sm">
           <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -107,7 +116,7 @@
     <!-- Tab nav -->
     <div class="mt-5 border-t border-gray-100 pt-4">
       <nav class="flex space-x-1">
-        {% for tab_id, tab_label in [('overview','Overview'),('output','Output'),('runs','Runs'),('state','State'),('plan','Plan Diff'),('graph','Graph')] %}
+        {% for tab_id, tab_label in [('overview','Overview'),('output','Output'),('runs','Runs'),('state','State'),('plan','Plan Diff'),('graph','Graph'),('sentinel','Sentinel')] %}
           <button @click="switchTab('{{ tab_id }}')"
                   :class="activeTab === '{{ tab_id }}' ? 'tab-active' : 'tab-inactive'"
                   class="tab">
@@ -337,6 +346,10 @@
                           class="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-0.5 rounded border border-red-200 hover:bg-red-50">
                     Cancel
                   </button>
+                </template>
+                <template x-if="run.terraform_version">
+                  <span class="inline-flex items-center gap-1 text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100"
+                        x-text="`tf ${run.terraform_version}`"></span>
                 </template>
                 <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
@@ -625,6 +638,319 @@
   </div>
 
   <!-- ================================================================
+       TAB: SENTINEL
+       ================================================================ -->
+  <div x-show="activeTab === 'sentinel'" x-transition>
+
+    <!-- Extra policies config card -->
+    <div class="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-semibold text-gray-900">Workspace Policy Sets</h3>
+        <button @click="saveSentinelConfig()"
+                :disabled="sentinelSaving"
+                class="px-3 py-1.5 bg-tf-600 hover:bg-tf-700 text-white text-xs font-medium rounded-lg
+                       transition-colors disabled:opacity-60 disabled:cursor-wait">
+          <span x-text="sentinelSaving ? 'Saving…' : 'Save'"></span>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            Extra policies directory (this workspace only)
+          </label>
+          <input type="text"
+                 x-model="sentinelExtraPolicies"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono
+                        focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent"
+                 placeholder="/path/to/workspace/policies">
+          <p class="mt-1 text-xs text-gray-500">
+            Additional policy sets applied only to this workspace, in addition to the global ones configured in Settings.
+          </p>
+        </div>
+
+        <!-- Detected extra policy sets (with checkboxes) -->
+        <template x-if="sentinelExtraSets.length">
+          <div class="mt-2">
+            <div class="flex items-center justify-between mb-1.5">
+              <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Extra policy sets</p>
+              <label class="flex items-center space-x-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                <input type="checkbox"
+                       :checked="sentinelExtraSets.every(s => s.enabled)"
+                       @change="sentinelExtraSets.forEach(s => s.enabled = $event.target.checked)"
+                       class="rounded border-gray-300 text-purple-600 focus:ring-purple-500">
+                <span>All</span>
+              </label>
+            </div>
+            <div class="space-y-1.5">
+              <template x-for="ps in sentinelExtraSets" :key="ps.name">
+                <label class="flex items-center space-x-3 px-3 py-2.5 rounded-lg border cursor-pointer select-none transition-all"
+                       :class="ps.enabled ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'">
+                  <input type="checkbox" x-model="ps.enabled"
+                         class="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 flex-shrink-0">
+                  <svg class="w-4 h-4 flex-shrink-0 transition-colors" :class="ps.enabled ? 'text-purple-500' : 'text-gray-400'"
+                       fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                  </svg>
+                  <span class="text-sm font-medium flex-1 transition-colors"
+                        :class="ps.enabled ? 'text-purple-800' : 'text-gray-500'" x-text="ps.name"></span>
+                  <span class="text-xs transition-colors"
+                        :class="ps.enabled ? 'text-purple-600' : 'text-gray-400'"
+                        x-text="ps.policy_count + (ps.policy_count === 1 ? ' policy' : ' policies')"></span>
+                  <template x-if="ps.has_config">
+                    <span class="text-xs px-1.5 py-0.5 rounded font-medium"
+                          :class="ps.enabled ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-400'">
+                      sentinel.hcl
+                    </span>
+                  </template>
+                </label>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Global policy sets (from Settings) — with checkboxes -->
+        <template x-if="sentinelGlobalSets.length">
+          <div class="mt-3 pt-3 border-t border-gray-100">
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Global policy sets <span class="text-gray-400 font-normal normal-case">(from Settings)</span>
+              </p>
+              <label class="flex items-center space-x-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                <input type="checkbox"
+                       :checked="sentinelGlobalSets.every(s => s.enabled)"
+                       @change="sentinelGlobalSets.forEach(s => s.enabled = $event.target.checked)"
+                       class="rounded border-gray-300 text-purple-600 focus:ring-purple-500">
+                <span>All</span>
+              </label>
+            </div>
+            <div class="space-y-1.5">
+              <template x-for="ps in sentinelGlobalSets" :key="ps.name">
+                <label class="flex items-center space-x-3 px-3 py-2.5 rounded-lg border cursor-pointer select-none transition-all"
+                       :class="ps.enabled ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'">
+                  <input type="checkbox" x-model="ps.enabled"
+                         class="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 flex-shrink-0">
+                  <svg class="w-4 h-4 flex-shrink-0 transition-colors" :class="ps.enabled ? 'text-purple-500' : 'text-gray-400'"
+                       fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                  </svg>
+                  <span class="text-sm font-medium flex-1 transition-colors"
+                        :class="ps.enabled ? 'text-purple-800' : 'text-gray-500'" x-text="ps.name"></span>
+                  <span class="text-xs transition-colors"
+                        :class="ps.enabled ? 'text-purple-600' : 'text-gray-400'"
+                        x-text="ps.policy_count + (ps.policy_count === 1 ? ' policy' : ' policies')"></span>
+                  <template x-if="ps.has_config">
+                    <span class="text-xs px-1.5 py-0.5 rounded font-medium"
+                          :class="ps.enabled ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-400'">
+                      sentinel.hcl
+                    </span>
+                  </template>
+                </label>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Manual Sentinel run card -->
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div>
+          <h3 class="font-semibold text-gray-900">Policy Check</h3>
+          <p class="text-xs text-gray-400 mt-0.5">
+            Runs all applicable Sentinel policies against the latest plan.
+            {% if sentinel_enforce_on_plan %}
+              <span class="text-purple-600 font-medium">Auto-check is enabled (runs after every Plan).</span>
+            {% endif %}
+          </p>
+        </div>
+        <button @click="runSentinel()"
+                :disabled="sentinelLoading"
+                class="flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white
+                       text-sm font-medium rounded-lg transition-colors disabled:opacity-60 disabled:cursor-wait">
+          <svg class="w-4 h-4" :class="sentinelLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          <span x-text="sentinelLoading ? 'Running…' : 'Run Sentinel Check'"></span>
+        </button>
+      </div>
+
+      <!-- Error -->
+      <div x-show="sentinelError"
+           class="mx-6 my-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700"
+           x-text="sentinelError"></div>
+
+      <!-- No result yet -->
+      <div x-show="!sentinelResult && !sentinelLoading && !sentinelError" class="py-12 text-center">
+        <p class="text-gray-400 text-sm">Click <strong>Run Sentinel Check</strong> to evaluate policies against the latest plan.</p>
+      </div>
+
+      <!-- Loading -->
+      <div x-show="sentinelLoading && !sentinelResult" class="py-12 text-center">
+        <div class="inline-block w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-gray-400 text-sm mt-3">Running policy checks…</p>
+      </div>
+
+      <!-- Results -->
+      <template x-if="sentinelResult">
+        <div>
+          <!-- Overall result banner -->
+          <div x-data="{
+            get totalPolicies() { return (sentinelResult.results || []).length; },
+            get failedBlocking() {
+              return (sentinelResult.results || []).filter(r =>
+                !r.passed && r.enforcement_level !== 'advisory'
+              ).length;
+            },
+            get failedAdvisory() {
+              return (sentinelResult.results || []).filter(r =>
+                !r.passed && r.enforcement_level === 'advisory'
+              ).length;
+            },
+            get passedCount() { return (sentinelResult.results || []).filter(r => r.passed).length; },
+          }"
+               class="px-6 py-4 border-b border-gray-100"
+               :class="sentinelResult.passed ? 'bg-green-50' : 'bg-red-50'">
+
+            <div class="flex items-start space-x-3">
+              <!-- Icon -->
+              <template x-if="sentinelResult.passed">
+                <svg class="w-7 h-7 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </template>
+              <template x-if="!sentinelResult.passed">
+                <svg class="w-7 h-7 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </template>
+
+              <div class="flex-1 min-w-0">
+                <!-- Title -->
+                <p class="font-semibold text-base" :class="sentinelResult.passed ? 'text-green-800' : 'text-red-800'"
+                   x-text="sentinelResult.passed ? 'All policies passed' : 'Policy check FAILED'"></p>
+
+                <!-- Counters row -->
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                  <span class="inline-flex items-center space-x-1 text-xs font-medium text-gray-600">
+                    <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                    <span x-text="`${totalPolicies} ${totalPolicies === 1 ? 'policy' : 'policies'} checked`"></span>
+                  </span>
+
+                  <span class="inline-flex items-center space-x-1 text-xs font-medium text-green-700">
+                    <svg class="w-3.5 h-3.5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                    <span x-text="`${passedCount} passed`"></span>
+                  </span>
+
+                  <template x-if="failedBlocking > 0">
+                    <span class="inline-flex items-center space-x-1 text-xs font-medium text-red-700">
+                      <svg class="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                      </svg>
+                      <span x-text="`${failedBlocking} failed (blocking)`"></span>
+                    </span>
+                  </template>
+
+                  <template x-if="failedAdvisory > 0">
+                    <span class="inline-flex items-center space-x-1 text-xs font-medium text-amber-700">
+                      <svg class="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                      </svg>
+                      <span x-text="`${failedAdvisory} advisory`"></span>
+                    </span>
+                  </template>
+                </div>
+
+                <!-- Failing policy names (blocking only) -->
+                <template x-if="failedBlocking > 0">
+                  <div class="mt-2 flex flex-wrap gap-1.5">
+                    <template x-for="r in (sentinelResult.results || []).filter(r => !r.passed && r.enforcement_level !== 'advisory')" :key="r.policy">
+                      <span class="inline-flex items-center space-x-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-mono">
+                        <span x-text="r.policy"></span>
+                        <span class="text-red-400 font-sans" x-text="`(${r.policy_set})`"></span>
+                      </span>
+                    </template>
+                  </div>
+                </template>
+
+                <!-- Timestamp -->
+                <template x-if="sentinelResult.ran_at">
+                  <p class="text-xs mt-1.5 text-gray-400"
+                     x-text="'Last run: ' + new Date(sentinelResult.ran_at).toLocaleString()"></p>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- Per-policy results table -->
+          <template x-if="sentinelResult.results && sentinelResult.results.length">
+            <div class="divide-y divide-gray-50">
+              <template x-for="(r, idx) in sentinelResult.results" :key="idx">
+                <div x-data="{ expanded: false }">
+                  <div class="px-6 py-3 flex items-center space-x-3 cursor-pointer hover:bg-gray-50"
+                       @click="expanded = !expanded">
+                    <!-- Pass/fail icon -->
+                    <template x-if="r.passed">
+                      <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                      </svg>
+                    </template>
+                    <template x-if="!r.passed">
+                      <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                      </svg>
+                    </template>
+
+                    <!-- Policy name -->
+                    <span class="font-mono text-sm text-gray-900 flex-1 truncate" x-text="r.policy"></span>
+
+                    <!-- Policy set -->
+                    <span class="text-xs text-gray-400 font-mono" x-text="r.policy_set"></span>
+
+                    <!-- Enforcement level badge -->
+                    <span class="text-xs px-2 py-0.5 rounded-full font-medium"
+                          :class="{
+                            'bg-gray-100 text-gray-600': r.enforcement_level === 'advisory',
+                            'bg-amber-100 text-amber-700': r.enforcement_level === 'soft-mandatory',
+                            'bg-red-100 text-red-700': r.enforcement_level === 'hard-mandatory',
+                          }"
+                          x-text="r.enforcement_level || 'hard-mandatory'"></span>
+
+                    <svg class="w-3.5 h-3.5 text-gray-300 transition-transform flex-shrink-0"
+                         :class="expanded ? 'rotate-90' : ''"
+                         fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                  </div>
+
+                  <!-- Expanded output -->
+                  <div x-show="expanded" x-transition class="px-6 pb-4">
+                    <div class="bg-gray-950 rounded-lg p-4 font-mono text-xs text-gray-300 overflow-x-auto whitespace-pre-wrap"
+                         x-text="r.output || '(no output)'"></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <div x-show="!sentinelResult.results || !sentinelResult.results.length" class="py-8 text-center">
+            <p class="text-gray-400 text-sm">No policy results.</p>
+          </div>
+        </div>
+      </template>
+    </div>
+
+  </div>
+
+  <!-- ================================================================
        EXECUTION MODAL (Plan / Apply)
        ================================================================ -->
   {% include "execution_modal.html" %}
@@ -642,6 +968,8 @@
 const WORKSPACE_ID = '{{ workspace.id }}';
 const CRED_STATUS = {{ cred_status | tojson }};
 const PROVIDERS = {{ workspace.providers | tojson }};
+const SENTINEL_EXTRA_POLICIES_INITIAL = {{ sentinel_extra_policies | tojson }};
+const SENTINEL_EXTRA_SETS_INITIAL = {{ sentinel_extra_sets | tojson }};
 
 function workspacePage(workspaceId) {
   return {
@@ -682,11 +1010,21 @@ function workspacePage(workspaceId) {
     modalSubmitting: false,
     modalVersion: 'system',
     applyConfirmed: false,
+    // Sentinel
+    sentinelLoading: false,
+    sentinelResult: null,
+    sentinelError: null,
+    sentinelExtraPolicies: SENTINEL_EXTRA_POLICIES_INITIAL,
+    sentinelExtraSets: [],
+    sentinelGlobalSets: [],
+    sentinelGlobalSetsLoaded: false,
+    sentinelSaving: false,
 
     async init() {
       this.setupSocket();
       this.loadVersions();
       if (this.activeTab === 'runs') this.loadRuns();
+      if (this.activeTab === 'sentinel') this.loadSentinelConfig();
     },
 
     // ── Runs pagination getters ────────────────────────────────────────
@@ -728,6 +1066,7 @@ function workspacePage(workspaceId) {
       if (tab === 'state')  this.loadState();
       if (tab === 'graph')  this.loadGraph();
       if (tab === 'runs' && !this.runsLoaded) this.loadRuns();
+      if (tab === 'sentinel') this.loadSentinelConfig();
     },
 
     setupSocket() {
@@ -945,6 +1284,94 @@ function workspacePage(workspaceId) {
           }
         }
       }, 2000);
+    },
+
+    async loadSentinelConfig() {
+      try {
+        const [globalR, wsR, lastR] = await Promise.all([
+          fetch('/api/sentinel/config'),
+          fetch(`/api/workspace/${workspaceId}/sentinel/config`),
+          fetch(`/api/workspace/${workspaceId}/sentinel/last-result`),
+        ]);
+        const globalD = await globalR.json();
+        const wsD = await wsR.json();
+        const lastD = await lastR.json();
+        // active_global_sets: workspace override takes precedence over global setting
+        const activeGlobal = (wsD.active_global_sets !== null && wsD.active_global_sets !== undefined)
+          ? wsD.active_global_sets
+          : (globalD.active_policy_sets || []);
+        this.sentinelGlobalSets = (globalD.global_policy_sets || []).map(ps => ({
+          ...ps,
+          enabled: activeGlobal.length === 0 || activeGlobal.includes(ps.name),
+        }));
+        this.sentinelGlobalSetsLoaded = true;
+        this.sentinelExtraPolicies = wsD.extra_policies || this.sentinelExtraPolicies;
+        const activeExtra = wsD.active_extra_sets || [];
+        this.sentinelExtraSets = (wsD.extra_policy_sets || []).map(ps => ({
+          ...ps,
+          enabled: activeExtra.length === 0 || activeExtra.includes(ps.name),
+        }));
+        // Restore last run result (only if not currently running)
+        if (lastD.ok && lastD.result && !this.sentinelLoading) {
+          this.sentinelResult = lastD.result;
+        }
+      } catch(e) {
+        console.error('loadSentinelConfig error:', e);
+      }
+    },
+
+    async saveSentinelConfig() {
+      this.sentinelSaving = true;
+      try {
+        // Compute active lists; null = all enabled (stored as absent key)
+        const allG = this.sentinelGlobalSets;
+        const enabledG = allG.filter(s => s.enabled).map(s => s.name);
+        const activeGlobalSets = (allG.length > 0 && enabledG.length < allG.length) ? enabledG : null;
+
+        const allE = this.sentinelExtraSets;
+        const enabledE = allE.filter(s => s.enabled).map(s => s.name);
+        const activeExtraSets = (allE.length > 0 && enabledE.length < allE.length) ? enabledE : null;
+
+        const res = await fetch(`/api/workspace/${workspaceId}/sentinel/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            extra_policies: this.sentinelExtraPolicies,
+            active_global_sets: activeGlobalSets,
+            active_extra_sets: activeExtraSets,
+          }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          await this.loadSentinelConfig();
+        }
+      } catch (e) {
+        console.error('saveSentinelConfig error:', e);
+      } finally {
+        this.sentinelSaving = false;
+      }
+    },
+
+    async runSentinel() {
+      this.sentinelLoading = true;
+      this.sentinelError = null;
+      this.sentinelResult = null;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/sentinel/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          this.sentinelError = data.error || `HTTP ${res.status}`;
+        } else {
+          this.sentinelResult = data.result;
+        }
+      } catch (e) {
+        this.sentinelError = e.message;
+      } finally {
+        this.sentinelLoading = false;
+      }
     },
   };
 }

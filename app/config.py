@@ -56,6 +56,52 @@ class Config:
     def default_terraform_version(self) -> str:
         return self._parser.get("terraform", "default_version", fallback="system")
 
+    # ------------------------------------------------------------------
+    # Sentinel
+    # ------------------------------------------------------------------
+
+    @property
+    def sentinel_cli_path(self) -> str:
+        """Absolute path to the Sentinel CLI binary, or empty to use PATH."""
+        raw = self._parser.get("sentinel", "cli_path", fallback="")
+        if not raw:
+            return ""
+        expanded = os.path.expanduser(raw)
+        if not os.path.isabs(expanded):
+            expanded = os.path.abspath(expanded)
+        return expanded
+
+    @property
+    def sentinel_global_policies(self) -> str:
+        """Directory containing global policy sets (applied to every workspace)."""
+        raw = self._parser.get("sentinel", "global_policies", fallback="")
+        if not raw:
+            return ""
+        expanded = os.path.expanduser(raw)
+        if not os.path.isabs(expanded):
+            expanded = os.path.abspath(expanded)
+        return expanded
+
+    @property
+    def sentinel_enforce_on_plan(self) -> bool:
+        """When True, every plan/apply automatically runs Sentinel checks."""
+        return self._parser.getboolean("sentinel", "enforce_on_plan", fallback=False)
+
+    @property
+    def sentinel_enforce_on_apply(self) -> bool:
+        """When True, block apply if Sentinel fails (requires enforce_on_plan)."""
+        return self._parser.getboolean("sentinel", "enforce_on_apply", fallback=False)
+
+    @property
+    def sentinel_active_policy_sets(self) -> list:
+        """Names of globally enabled policy sets; empty list = all enabled."""
+        raw = self._parser.get("sentinel", "active_policy_sets", fallback="")
+        return [n.strip() for n in raw.split(",") if n.strip()]
+
+    # ------------------------------------------------------------------
+    # Security
+    # ------------------------------------------------------------------
+
     @property
     def lock_password_hash(self) -> str:
         """PBKDF2 hash of the portal lock password; empty string means unlocked."""

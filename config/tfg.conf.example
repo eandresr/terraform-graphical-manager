@@ -63,3 +63,43 @@ default_version = system
 # the password; it will be hashed and stored here automatically.
 # Leave blank to run without authentication (default).
 password_hash =
+
+# ──────────────────────────────────────────────────────────────
+# Sentinel Policy Integration
+# ──────────────────────────────────────────────────────────────
+[sentinel]
+
+# Full path to the Sentinel CLI binary.
+# Leave blank to use 'sentinel' found on PATH.
+cli_path =
+
+# Absolute path to a directory containing global policy sets.
+# Each immediate sub-directory is treated as a policy set and must
+# contain one or more .sentinel policy files.  An optional
+# sentinel.hcl file inside the policy-set directory controls
+# per-policy enforcement levels:
+#
+#   /opt/sentinel-policies/
+#   ├── base/
+#   │   ├── require-tags.sentinel
+#   │   ├── no-public-s3.sentinel
+#   │   └── sentinel.hcl          ← optional enforcement overrides
+#   └── compliance/
+#       └── restrict-regions.sentinel
+#
+# Global policy sets are applied to every workspace in addition to
+# any workspace-level extra policies.
+# Leave blank to disable global policy enforcement.
+global_policies =
+
+# Automatically run Sentinel checks after every 'terraform plan'.
+# Results are stored with the execution and shown in the workspace
+# Sentinel tab.
+# Set to 'true' to enable.
+enforce_on_plan = false
+
+# Block 'terraform apply' when Sentinel checks fail.
+# hard-mandatory and soft-mandatory policy failures will prevent the
+# apply from proceeding.  Requires enforce_on_plan = true.
+# Set to 'true' to enable.
+enforce_on_apply = false

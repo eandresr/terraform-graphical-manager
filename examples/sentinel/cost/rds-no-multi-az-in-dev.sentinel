@@ -1,0 +1,29 @@
+# rds-no-multi-az-in-dev.sentinel
+#
+# WHAT  : Avisa cuando se deploya una instancia RDS con Multi-AZ en un
+#         entorno que no es producción (basado en la tag Environment).
+# WHY   : Multi-AZ dobla el coste de la instancia; en dev/staging es
+#         innecesario y un gasto evitable.
+# LEVEL : advisory
+
+import "tfplan/v2" as tfplan
+
+rds_instances = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_db_instance" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+is_non_prod = func(tags) {
+  env = strings.to_lower(tags["Environment"] else "")
+  return env in ["dev", "staging", "sandbox", "test", "qa"]
+}
+
+warnings = filter rds_instances as _, rds {
+  rds.change.after.multi_az else false and
+  is_non_prod(rds.change.after.tags else {})
+}
+
+main = rule when length(warnings) > 0 {
+  print("Advisory: RDS Multi-AZ habilitado en entorno no-productivo —",
+        "considera deshabilitarlo para reducir costes:", keys(warnings)) or true
+}

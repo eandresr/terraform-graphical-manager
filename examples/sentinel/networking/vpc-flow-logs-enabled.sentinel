@@ -1,0 +1,42 @@
+# vpc-flow-logs-enabled.sentinel
+#
+# WHAT  : Requiere que toda VPC creada o modificada tenga al menos
+#         un recurso aws_flow_log asociado en el plan.
+# WHY   : VPC Flow Logs son imprescindibles para auditoría de red,
+#         detección de anomalías y respuesta ante incidentes.
+#         CIS AWS Benchmark §2.9.
+# LEVEL : soft-mandatory
+
+import "tfplan/v2" as tfplan
+
+vpcs = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_vpc" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+# Recoge los flow_log del plan para cruzar por vpc_id
+flow_logs = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_flow_log" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+# IDs de VPCs que tendrán flow log (puede ser referencia o valor literal)
+covered_vpcs = []
+for flow_logs as _, fl {
+  vpc_id = fl.change.after.vpc_id else null
+  if vpc_id is not null {
+    append(covered_vpcs, vpc_id)
+  }
+}
+
+# Una VPC "no cubierta" es aquella cuyo address no aparece como vpc_id
+# en ningún flow_log del plan. Nótese que las referencias a recursos nuevos
+# pueden aparecer como null en el plan; si covered_vpcs está vacío y hay
+# VPCs nuevas, todas fallan.
+violations = filter vpcs as addr, _ {
+  not (addr in covered_vpcs)
+}
+
+main = rule {
+  length(violations) is 0
+}

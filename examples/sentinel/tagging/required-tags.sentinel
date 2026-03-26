@@ -1,0 +1,53 @@
+# required-tags.sentinel
+#
+# WHAT  : Exige que todos los recursos etiquetables tengan las tags
+#         obligatorias: Name, Environment, Owner y CostCenter.
+# WHY   : Sin tags consistentes es imposible trazar costes, responsables
+#         ni entornos en una cuenta multi-equipo.
+# LEVEL : hard-mandatory
+
+import "tfplan/v2" as tfplan
+
+# Tags que DEBEN existir en todos los recursos etiquetables
+required_tags = ["Name", "Environment", "Owner", "CostCenter"]
+
+# Tipos de recursos relevantes de los proveedores más comunes
+taggable_types = [
+  # AWS
+  "aws_instance", "aws_db_instance", "aws_s3_bucket", "aws_vpc",
+  "aws_subnet", "aws_security_group", "aws_lb", "aws_eks_cluster",
+  "aws_elasticache_cluster", "aws_lambda_function", "aws_sqs_queue",
+  "aws_sns_topic", "aws_cloudwatch_log_group", "aws_efs_file_system",
+  "aws_ebs_volume", "aws_ecs_service", "aws_ecs_cluster",
+  # Azure
+  "azurerm_virtual_machine", "azurerm_resource_group",
+  "azurerm_storage_account", "azurerm_sql_server",
+  # GCP
+  "google_compute_instance", "google_container_cluster",
+  "google_storage_bucket",
+]
+
+resources = filter tfplan.resource_changes as _, rc {
+  rc.type in taggable_types and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+resource_missing_tags = func(resource) {
+  tags = resource.change.after.tags else {}
+  missing = filter required_tags as t {
+    not (t in keys(tags)) or tags[t] is null or tags[t] is ""
+  }
+  return missing
+}
+
+violations = {}
+for resources as addr, rc {
+  missing = resource_missing_tags(rc)
+  if length(missing) > 0 {
+    violations[addr] = missing
+  }
+}
+
+main = rule {
+  length(violations) is 0
+}

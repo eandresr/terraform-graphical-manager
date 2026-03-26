@@ -1,0 +1,42 @@
+# no-default-tags-override.sentinel
+#
+# WHAT  : Advierte si un recurso no hereda las tags del provider default_tags
+#         y define tags propias que podrían colisionar o sobreescribir las
+#         corporativas.
+# WHY   : Cuando se configura default_tags en el provider AWS para aplicar
+#         tags corporativas automáticamente, resources que definen las mismas
+#         tags manualmente pueden crear confusión o sobreescribir valores.
+# LEVEL : advisory (solo aviso, no bloquea)
+
+import "tfplan/v2" as tfplan
+
+# Tags que se gestionan centralmente (vía default_tags u otro mecanismo)
+corporate_tags = ["Owner", "CostCenter", "ManagedBy"]
+
+taggable_types = [
+  "aws_instance", "aws_db_instance", "aws_s3_bucket", "aws_vpc",
+  "aws_subnet", "aws_security_group", "aws_lb", "aws_eks_cluster",
+  "aws_lambda_function",
+]
+
+resources = filter tfplan.resource_changes as _, rc {
+  rc.type in taggable_types and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+has_corporate_tag = func(rc) {
+  tags = rc.change.after.tags else {}
+  return any corporate_tags as ct {
+    ct in keys(tags)
+  }
+}
+
+warnings = filter resources as _, rc {
+  has_corporate_tag(rc)
+}
+
+# Advisory: siempre pasa, solo imprime aviso
+main = rule when length(warnings) > 0 {
+  print("Advisory: los siguientes recursos definen tags corporativas manualmente:",
+        keys(warnings)) or true
+}

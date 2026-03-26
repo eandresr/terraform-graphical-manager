@@ -1,0 +1,36 @@
+# ec2-ebs-optimized-required.sentinel
+#
+# WHAT  : Aconseja habilitar EBS-optimized en instancias EC2 que
+#         soportan la opción, para maximizar el rendimiento de disco
+#         y evitar throttling silencioso.
+# WHY   : En instancias que no son EBS-optimized por defecto, el IOPS
+#         compartido con la red puede causar degradación y, paradójicamente,
+#         forzar instancias más caras para compensar.
+# LEVEL : advisory
+
+import "tfplan/v2" as tfplan
+
+# Familias donde EBS-optimized NO es el default y debe forzarse
+requires_explicit_opt = ["m3.", "c3.", "r3.", "i2.", "d2."]
+
+ec2_instances = filter tfplan.resource_changes as _, rc {
+  rc.type is "aws_instance" and
+  (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+needs_opt = func(inst) {
+  itype = inst.change.after.instance_type else ""
+  is_old_family = any requires_explicit_opt as prefix {
+    strings.has_prefix(itype, prefix)
+  }
+  explicitly_set = inst.change.after.ebs_optimized else false
+  return is_old_family and not explicitly_set
+}
+
+warnings = filter ec2_instances as _, inst {
+  needs_opt(inst)
+}
+
+main = rule when length(warnings) > 0 {
+  print("Advisory: considera habilitar ebs_optimized = true en:", keys(warnings)) or true
+}
