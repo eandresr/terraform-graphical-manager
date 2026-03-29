@@ -124,7 +124,7 @@ def submit_run(workspace_id: str):
     from flask import session as _session
     from app.variable_groups import get_vars_for_workspace
     _enc_key = _session.get("tgm_enc_key", "")
-    _group_env, _sensitive_values, _var_entries = get_vars_for_workspace(workspace_id, _enc_key)
+    _group_env, _sensitive_values = get_vars_for_workspace(workspace_id, _enc_key)
     isolated_env.update(_group_env)
 
     execution = Execution(
@@ -138,11 +138,6 @@ def submit_run(workspace_id: str):
     )
     execution.terraform_binary = tf_binary
     execution.sensitive_values = _sensitive_values
-    execution.run_params = _collect_run_params(
-        workspace_path=workspace["abs_path"],
-        var_entries=_var_entries,
-        user_env=user_env,
-    )
 
     eq = current_app.config["EXECUTION_QUEUE"]
     eq.submit(execution)
@@ -459,177 +454,6 @@ def _get_workspace_or_404(workspace_id: str):
     return scanner.get_workspace_by_id(workspace_id)
 
 
-# ---------------------------------------------------------------------------
-# Run params collector
-# ---------------------------------------------------------------------------
-
-def _scan_tfvars_values(workspace_path: str) -> list:
-    """
-    Scan .tfvars / .tfvars.json files in *workspace_path* and return a list
-    of dicts ``{key, value, file}`` for each assignment found.
-    Complex types (lists/maps) are summarised as ``"[...]"`` / ``"{...}"``.
-    """
-    import json
-    import os
-    import re
-
-    entries: list = []
-    try:
-        fnames = sorted(
-            f for f in os.listdir(workspace_path)
-            if f.endswith(".tfvars") or f.endswith(".tfvars.json")
-        )
-    except OSError:
-        return entries
-
-    for fname in fnames:
-        fpath = os.path.join(workspace_path, fname)
-        if fname.endswith(".json"):
-            try:
-                with open(fpath, encoding="utf-8") as fh:
-                    data = json.load(fh)
-                for k, v in data.items():
-                    entries.append({"key": str(k), "value": str(v), "file": fname})
-            except Exception:
-                pass
-        else:
-            try:
-                with open(fpath, encoding="utf-8", errors="replace") as fh:
-                    for line in fh:
-                        m = re.match(r"^\s*([A-Za-z_]\w*)\s*=\s*(.+)", line.rstrip())
-                        if not m:
-                            continue
-                        raw = m.group(2).strip().rstrip(",")
-                        if raw.startswith('"') and raw.endswith('"'):
-                            val = raw[1:-1]
-                        elif raw.startswith("["):
-                            val = "[...]"
-                        elif raw.startswith("{"):
-                            val = "{...}"
-                        else:
-                            val = raw
-                        entries.append({"key": m.group(1), "value": val, "file": fname})
-            except OSError:
-                pass
-    return entries
-
-
-def _scan_variable_defaults(workspace_path: str) -> Dict[str, str]:
-    """
-    Scan *.tf files in *workspace_path* for variable blocks and return a dict
-    mapping variable name → default value string.
-    Only captures single-line scalar defaults (string, number, bool).
-    """
-    import os
-    import re
-
-    defaults: Dict[str, str] = {}
-    try:
-        fnames = [f for f in os.listdir(workspace_path) if f.endswith(".tf")]
-    except OSError:
-        return defaults
-
-    for fname in fnames:
-        fpath = os.path.join(workspace_path, fname)
-        try:
-            with open(fpath, encoding="utf-8", errors="replace") as fh:
-                lines = fh.readlines()
-        except OSError:
-            continue
-        i = 0
-        while i < len(lines):
-            vm = re.match(r'\s*variable\s+"([^"]+)"\s*\{', lines[i])
-            if vm:
-                varname = vm.group(1)
-                depth = lines[i].count("{") - lines[i].count("}")
-                j = i + 1
-                while j < len(lines) and depth > 0:
-                    depth += lines[j].count("{") - lines[j].count("}")
-                    if depth > 0:
-                        dm = re.match(r"\s*default\s*=\s*(.+)", lines[j].rstrip())
-                        if dm:
-                            dval = dm.group(1).strip().rstrip(",")
-                            if dval.startswith('"') and dval.endswith('"'):
-                                dval = dval[1:-1]
-                            if varname not in defaults:
-                                defaults[varname] = dval
-                    j += 1
-                i = j
-            else:
-                i += 1
-    return defaults
-
-
-def _collect_run_params(
-    workspace_path: str,
-    var_entries: list,
-    user_env: Dict[str, str],
-) -> list:
-    """
-    Build a structured list of variable entries for the run detail "Values"
-    panel.  Each entry: {env_key, key, value, sensitive, source, file}.
-
-    Sources: workspace | carpeta | env | tfvars | default
-    """
-    params: list = []
-    seen_keys: set = set()
-
-    # ── 1. Variable groups (workspace / carpeta) ───────────────────────
-    for entry in var_entries:
-        env_key = entry["env_key"]
-        params.append({
-            "env_key": env_key,
-            "key": env_key[7:] if env_key.startswith("TF_VAR_") else env_key,
-            "value": entry["display_value"],
-            "sensitive": entry["sensitive"],
-            "source": entry["source"],
-            "file": None,
-        })
-        seen_keys.add(env_key)
-
-    # ── 2. User-supplied TF_VAR_* from the run modal ───────────────────
-    for k in sorted(user_env):
-        if not k.startswith("TF_VAR_"):
-            continue
-        params.append({
-            "env_key": k,
-            "key": k[7:],
-            "value": user_env[k],
-            "sensitive": False,
-            "source": "env",
-            "file": None,
-        })
-        seen_keys.add(k)
-
-    # ── 3. .tfvars files in workspace ─────────────────────────────────
-    for entry in _scan_tfvars_values(workspace_path):
-        env_key = f"TF_VAR_{entry['key']}"
-        params.append({
-            "env_key": env_key,
-            "key": entry["key"],
-            "value": entry["value"],
-            "sensitive": False,
-            "source": "tfvars",
-            "file": entry["file"],
-        })
-        seen_keys.add(env_key)
-
-    # ── 4. Default values from .tf variable declarations ──────────────
-    for varname, default_val in sorted(_scan_variable_defaults(workspace_path).items()):
-        env_key = f"TF_VAR_{varname}"
-        if env_key in seen_keys:
-            continue
-        params.append({
-            "env_key": env_key,
-            "key": varname,
-            "value": default_val,
-            "sensitive": False,
-            "source": "default",
-            "file": "variables.tf",
-        })
-    return params
-
-
 @api_bp.route("/settings/api-token")
 def get_api_token():
     """Return the current API Bearer token — requires an authenticated session."""
@@ -895,59 +719,6 @@ def _parse_dot(dot_output: str) -> Dict:
 
 
 # -------------------------------------------------------------------------
-# Workspace-level individual variables (stored in workspace_config)
-# -------------------------------------------------------------------------
-
-@api_bp.route("/workspace/<workspace_id>/vars", methods=["GET"])
-def get_workspace_vars(workspace_id: str):
-    """Return individual variables stored for this workspace (sensitive values masked)."""
-    from app.storage import get_backend
-    backend = get_backend()
-    cfg = backend.get_workspace_config(workspace_id)
-    variables = [
-        {**v, "value": ""} if v.get("sensitive") else dict(v)
-        for v in cfg.get("variables", [])
-    ]
-    return jsonify({"variables": variables})
-
-
-@api_bp.route("/workspace/<workspace_id>/vars", methods=["PUT"])
-def save_workspace_vars(workspace_id: str):
-    """Persist individual variables for this workspace."""
-    from flask import session
-    from app.storage import get_backend
-    from app.crypto import encrypt
-    backend = get_backend()
-    body = request.get_json(silent=True) or {}
-    incoming = body.get("variables", [])
-    password = session.get("tgm_enc_key", "")
-    cfg = backend.get_workspace_config(workspace_id)
-    existing_map = {v["key"]: v for v in cfg.get("variables", [])}
-    saved = []
-    for v in incoming:
-        v = dict(v)
-        key = v.get("key", "").strip()
-        if not key:
-            continue
-        v["key"] = key
-        if v.get("sensitive"):
-            if not password:
-                return jsonify(
-                    {"ok": False, "error": "Portal password required for sensitive variables."}
-                ), 400
-            if v.get("value"):
-                v["value"] = encrypt(v["value"], password)
-            elif key in existing_map and existing_map[key].get("sensitive"):
-                v["value"] = existing_map[key]["value"]
-            else:
-                v["value"] = ""
-        saved.append(v)
-    cfg["variables"] = saved
-    backend.set_workspace_config(workspace_id, cfg)
-    return jsonify({"ok": True})
-
-
-# -------------------------------------------------------------------------
 # Variable Groups
 # -------------------------------------------------------------------------
 
@@ -1029,70 +800,3 @@ def delete_variable_group(group_id: str):
     from app.variable_groups import delete_group
     delete_group(group_id)
     return jsonify({"ok": True})
-
-
-@api_bp.route("/variable-groups/unsensitize-all", methods=["POST"])
-def unsensitize_all_vars():
-    """
-    Decrypt every sensitive variable using the current session enc_key and
-    store the plaintext with sensitive=False.  Must be called while the
-    session still holds a valid enc_key (i.e. before removing the password).
-    """
-    from flask import session as _session
-    from app.variable_groups import unsensitize_all_sensitive
-    enc_key = _session.get("tgm_enc_key", "")
-    if not enc_key:
-        return jsonify({"ok": False, "error": "No encryption key in session."}), 400
-    converted = unsensitize_all_sensitive(enc_key)
-    return jsonify({"ok": True, "converted": converted})
-
-
-@api_bp.route("/sensitive-vars-summary")
-def sensitive_vars_summary():
-    """
-    Return a flat list of sensitive variable locations for the 'Remove lock'
-    confirmation modal.  Each entry: {folder, workspace, group, variable}.
-    Groups applied to all workspaces use workspace='(all workspaces)'.
-    """
-    from app.variable_groups import list_all_groups
-    from app.workspace_scanner import WorkspaceScanner
-
-    config = current_app.config["TFG_CONFIG"]
-    scanner = WorkspaceScanner(config.repos_root)
-    all_workspaces = scanner.get_flat_list()
-
-    # Build a lookup: workspace_id → {folder, name}
-    ws_lookup: Dict[str, Dict[str, str]] = {}
-    for ws in all_workspaces:
-        parts = ws["relative_path"].replace("\\", "/").split("/")
-        folder = "/".join(parts[:-1]) if len(parts) > 1 else "."
-        ws_lookup[ws["id"]] = {"folder": folder, "name": ws["name"]}
-
-    entries = []
-    for group in list_all_groups():
-        sensitive_vars = [
-            v["key"] for v in group.get("variables", [])
-            if v.get("sensitive") and v.get("value")
-        ]
-        if not sensitive_vars:
-            continue
-        ws_ids = group.get("workspace_ids") or []
-        if ws_ids == ["*"]:
-            targets = [{"folder": "(global)", "workspace": "(all workspaces)"}]
-        else:
-            targets = [
-                {
-                    "folder": ws_lookup[wid]["folder"] if wid in ws_lookup else wid,
-                    "workspace": ws_lookup[wid]["name"] if wid in ws_lookup else wid,
-                }
-                for wid in ws_ids
-            ]
-        for target in targets:
-            for var_key in sensitive_vars:
-                entries.append({
-                    "folder": target["folder"],
-                    "workspace": target["workspace"],
-                    "group": group.get("name", group["id"]),
-                    "variable": var_key,
-                })
-    return jsonify(entries)

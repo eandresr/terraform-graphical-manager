@@ -1,80 +1,75 @@
 """
-AWS S3 Storage Backend — stores execution metadata and logs in an S3 bucket.
+GCP Cloud Storage Backend — stores execution metadata and logs in a GCS bucket.
 
 Required environment variables:
     TERRAFORM_GRAPHICAL_BACKEND_BUCKET
-    TERRAFORM_GRAPHICAL_BACKEND_AWS_ACCESS_KEY_ID
-    TERRAFORM_GRAPHICAL_BACKEND_AWS_SECRET_ACCESS_KEY
-    TERRAFORM_GRAPHICAL_BACKEND_AWS_REGION            (default: us-east-1)
+    TERRAFORM_GRAPHICAL_BACKEND_GOOGLE_CREDENTIALS   (service account JSON string)
 """
 import json
 import os
 from typing import Any, Dict, List, Optional
 
-import boto3
-from botocore.exceptions import BotoCoreError, ClientError
+from google.cloud import storage as gcs
+from google.oauth2 import service_account
 
 
-class S3Backend:
+class GCSBackend:
     def __init__(self):
-        self._bucket = os.environ["TERRAFORM_GRAPHICAL_BACKEND_BUCKET"]
-        self._client = boto3.client(
-            "s3",
-            aws_access_key_id=os.environ.get(
-                "TERRAFORM_GRAPHICAL_BACKEND_AWS_ACCESS_KEY_ID"
-            ),
-            aws_secret_access_key=os.environ.get(
-                "TERRAFORM_GRAPHICAL_BACKEND_AWS_SECRET_ACCESS_KEY"
-            ),
-            region_name=os.environ.get(
-                "TERRAFORM_GRAPHICAL_BACKEND_AWS_REGION", "us-east-1"
-            ),
-        )
+        self._bucket_name = os.environ["TERRAFORM_GRAPHICAL_BACKEND_BUCKET"]
+        credentials_json = os.environ.get("TERRAFORM_GRAPHICAL_BACKEND_GOOGLE_CREDENTIALS")
+
+        if credentials_json:
+            creds_info = json.loads(credentials_json)
+            creds = service_account.Credentials.from_service_account_info(creds_info)
+            self._client = gcs.Client(credentials=creds)
+        else:
+            # Fall back to Application Default Credentials
+            self._client = gcs.Client()
+
+        self._bucket = self._client.bucket(self._bucket_name)
 
     # ------------------------------------------------------------------
     # Write
     # ------------------------------------------------------------------
 
     def store_execution(self, execution) -> None:
-        """Persist metadata, logs, and plan artefacts for an execution."""
         prefix = self._execution_prefix(execution.workspace_id, execution.timestamp)
 
-        # metadata.json
         metadata = self._build_metadata(execution)
         self._put_json(f"{prefix}metadata.json", metadata)
 
-        # logs
         log_text = "\n".join(execution.logs)
         if execution.command == "plan":
             self._put_text(f"{prefix}plan.log", log_text)
         else:
             self._put_text(f"{prefix}apply.log", log_text)
 
-        # plan.json
         if execution.plan_json:
             self._put_json(f"{prefix}plan.json", execution.plan_json)
 
-        # tfplan.binary
         if execution.plan_binary_path and os.path.isfile(execution.plan_binary_path):
-            self._put_file(f"{prefix}tfplan.binary", execution.plan_binary_path)
+            blob = self._bucket.blob(f"{prefix}tfplan.binary")
+            blob.upload_from_filename(execution.plan_binary_path)
 
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------
 
     def list_executions(self, workspace_id: str) -> List[Dict[str, Any]]:
-        """Return a list of metadata dicts for all runs of a workspace."""
         prefix = f"workspaces/{workspace_id}/runs/"
         results: List[Dict[str, Any]] = []
         try:
-            paginator = self._client.get_paginator("list_objects_v2")
-            for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix, Delimiter="/"):
-                for cp in page.get("CommonPrefixes", []):
-                    meta_key = cp["Prefix"] + "metadata.json"
-                    meta = self._get_json(meta_key)
-                    if meta:
-                        results.append(meta)
-        except (BotoCoreError, ClientError):
+            blobs = self._client.list_blobs(
+                self._bucket_name, prefix=prefix, delimiter="/"
+            )
+            # Consume the iterator to populate blobs.prefixes
+            for _ in blobs:
+                pass
+            for run_prefix in blobs.prefixes:
+                meta = self._get_json(f"{run_prefix}metadata.json")
+                if meta:
+                    results.append(meta)
+        except Exception:
             pass
         return sorted(results, key=lambda m: m.get("timestamp", ""), reverse=True)
 
@@ -106,47 +101,35 @@ class S3Backend:
             "providers": execution.providers,
             "backend": execution.backend,
             "terraform_version": execution.terraform_version,
-            "run_params": getattr(execution, "run_params", []),
         }
 
     def _put_json(self, key: str, data: Dict) -> None:
         try:
-            self._client.put_object(
-                Bucket=self._bucket,
-                Key=key,
-                Body=json.dumps(data, indent=2, default=str).encode(),
-                ContentType="application/json",
+            blob = self._bucket.blob(key)
+            blob.upload_from_string(
+                json.dumps(data, indent=2, default=str),
+                content_type="application/json",
             )
-        except (BotoCoreError, ClientError):
+        except Exception:
             pass
 
     def _put_text(self, key: str, text: str) -> None:
         try:
-            self._client.put_object(
-                Bucket=self._bucket,
-                Key=key,
-                Body=text.encode(),
-                ContentType="text/plain",
-            )
-        except (BotoCoreError, ClientError):
-            pass
-
-    def _put_file(self, key: str, file_path: str) -> None:
-        try:
-            self._client.upload_file(file_path, self._bucket, key)
-        except (BotoCoreError, ClientError):
+            blob = self._bucket.blob(key)
+            blob.upload_from_string(text, content_type="text/plain")
+        except Exception:
             pass
 
     def _get_json(self, key: str) -> Optional[Dict]:
         try:
-            resp = self._client.get_object(Bucket=self._bucket, Key=key)
-            return json.loads(resp["Body"].read())
-        except (BotoCoreError, ClientError, json.JSONDecodeError):
+            blob = self._bucket.blob(key)
+            return json.loads(blob.download_as_text())
+        except Exception:
             return None
 
     def _get_text(self, key: str) -> Optional[str]:
         try:
-            resp = self._client.get_object(Bucket=self._bucket, Key=key)
-            return resp["Body"].read().decode()
-        except (BotoCoreError, ClientError):
+            blob = self._bucket.blob(key)
+            return blob.download_as_text()
+        except Exception:
             return None

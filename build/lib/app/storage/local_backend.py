@@ -244,7 +244,6 @@ class LocalBackend:
             "terraform_version": execution.terraform_version,
             "duration_seconds": execution.duration_seconds,
             "sentinel_result": getattr(execution, "sentinel_result", None),
-            "run_params": getattr(execution, "run_params", []),
         }
 
     @staticmethod

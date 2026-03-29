@@ -51,9 +51,6 @@ class Execution:
         # never persisted to storage.
         self.sensitive_values: List[str] = []
 
-        # Structured variable parameters recorded at run submission time.
-        self.run_params: List[Dict[str, Any]] = []
-
         self.timestamp = datetime.datetime.utcnow().isoformat()
         self.status = ExecutionStatus.QUEUED
         self.logs: List[str] = []
@@ -100,7 +97,6 @@ class Execution:
             "duration_seconds": self.duration_seconds,
             "log_lines": len(self.logs),
             "sentinel_result": self.sentinel_result,
-            "run_params": self.run_params,
         }
 
     @classmethod
@@ -124,7 +120,6 @@ class Execution:
         obj.duration_seconds = meta.get("duration_seconds")
         obj.terraform_binary = meta.get("terraform_binary")
         obj.sentinel_result = meta.get("sentinel_result")
-        obj.run_params = meta.get("run_params") or []
         obj.sentinel_policies_override = None
         obj.sensitive_values = []
         obj._workdir = None
@@ -257,9 +252,6 @@ class ExecutionQueue:
             self._emit_log(execution, line)
 
         try:
-            ts = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-            log(f"=== Run started: {ts}  |  command: {execution.command} ===")
-
             runner = TerraformRunner(
                 execution.workspace_path, execution.env_vars, execution.terraform_binary
             )

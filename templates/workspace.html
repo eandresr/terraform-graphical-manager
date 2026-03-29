@@ -116,7 +116,7 @@
     <!-- Tab nav -->
     <div class="mt-5 border-t border-gray-100 pt-4">
       <nav class="flex space-x-1">
-        {% for tab_id, tab_label in [('overview','Overview'),('output','Output'),('runs','Runs'),('state','State'),('plan','Plan Diff'),('graph','Graph'),('sentinel','Sentinel')] %}
+        {% for tab_id, tab_label in [('overview','Overview'),('vars','Variables'),('output','Output'),('runs','Runs'),('state','State'),('plan','Plan Diff'),('graph','Graph'),('sentinel','Sentinel')] %}
           <button @click="switchTab('{{ tab_id }}')"
                   :class="activeTab === '{{ tab_id }}' ? 'tab-active' : 'tab-inactive'"
                   class="tab">
@@ -218,6 +218,506 @@
     </div>
 
   </div>
+
+  <!-- ================================================================
+       TAB: VARIABLES
+       ================================================================ -->
+  <div x-show="activeTab === 'vars'" x-transition>
+
+    <!-- Sub-tab nav -->
+    <div class="flex space-x-1 mb-5 border-b border-gray-100 pb-3">
+      <button @click="varsSubTab='groups'"
+              :class="varsSubTab==='groups' ? 'tab-active' : 'tab-inactive'"
+              class="tab">Variable Groups</button>
+      <button @click="varsSubTab='vars'"
+              :class="varsSubTab==='vars' ? 'tab-active' : 'tab-inactive'"
+              class="tab">Variables</button>
+    </div>
+
+    <!-- ── Sub-tab: Variable Groups ─────────────────────────────── -->
+    <div x-show="varsSubTab === 'groups'">
+  <div x-data="varGroupsTab('{{ workspace.id }}', {{ 'true' if config.lock_password_hash else 'false' }}, '{{ active_tab }}')"
+       x-init="if (initialTab === 'vars') load()"
+       @tgm-load-vars.window="if (!loaded && !loading) load()">
+
+    {# ---- no-password warning ---- #}
+    {% if not config.lock_password_hash %}
+    <div class="mb-4 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
+      <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <span><strong>Sensitive variables unavailable.</strong>
+        A portal password is required to encrypt/decrypt sensitive values.
+        Set one in <a href="/settings" class="underline font-medium">Settings → Portal Security</a>
+        (recommend 8 random words or a 100-bit passphrase).</span>
+    </div>
+    {% endif %}
+
+    {# ---- toolbar ---- #}
+    <div class="flex items-center justify-between mb-4 gap-3">
+      <h3 class="font-semibold text-gray-900">Variable Groups</h3>
+      <div class="flex gap-2">
+        <button @click="openAssign()"
+                class="btn-secondary text-xs flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+          </svg>
+          Assign existing
+        </button>
+        <button @click="openCreate()"
+                class="btn-primary text-xs flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+          New group
+        </button>
+      </div>
+    </div>
+
+    {# ---- loading/empty state ---- #}
+    <template x-if="loading">
+      <div class="py-10 text-center text-gray-400 text-sm">Loading…</div>
+    </template>
+    <template x-if="!loading && groups.length === 0">
+      <div class="py-12 text-center text-gray-400">
+        <svg class="mx-auto w-10 h-10 mb-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <p class="font-medium">No variable groups applied</p>
+        <p class="text-xs mt-1">Create a new group or assign an existing one.</p>
+      </div>
+    </template>
+
+    {# ---- group list ---- #}
+    <template x-if="!loading && groups.length > 0">
+      <div class="space-y-3">
+
+        {# precedence note #}
+        <p class="text-xs text-gray-400 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 flex-shrink-0 text-gray-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Workspace-scoped variables override global variables with the same key.
+        </p>
+
+        <template x-for="g in sortedGroups" :key="g.id">
+          <div :class="isLocal(g) ? 'border-tf-200 bg-tf-50/30' : 'border-gray-200 bg-white'"
+               class="border rounded-xl overflow-hidden">
+
+            {# group header #}
+            <div class="px-5 py-3 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                 @click="g._open = !g._open">
+              <svg class="w-4 h-4 text-gray-400 transition-transform flex-shrink-0"
+                   :class="g._open ? 'rotate-90' : ''"
+                   fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+              </svg>
+              <div class="flex-1 min-w-0">
+                <span class="font-semibold text-gray-900 text-sm" x-text="g.name"></span>
+                <span class="ml-2 text-xs text-gray-400" x-text="`(${(g.variables||[]).length} var${(g.variables||[]).length===1?'':'s'})`"></span>
+                <span x-show="g.description" class="ml-2 text-xs text-gray-400 italic" x-text="g.description"></span>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <span x-show="g.workspace_ids && g.workspace_ids[0]==='*'"
+                      class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">global</span>
+                <span x-show="isLocal(g)"
+                      class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-tf-100 text-tf-700"
+                      title="This group is scoped to this workspace and overrides global values">workspace</span>
+                <button @click.stop="editGroup(g)"
+                        class="text-xs text-gray-400 hover:text-tf-600 px-2 py-1 rounded hover:bg-tf-50 transition-colors">Edit</button>
+                <button @click.stop="unassignGroup(g)"
+                        class="text-xs text-gray-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 transition-colors">Unassign</button>
+              </div>
+            </div>
+
+            {# variables table #}
+            <div x-show="g._open" x-transition class="border-t border-gray-100">
+              <template x-if="!g.variables || g.variables.length === 0">
+                <p class="px-5 py-4 text-xs text-gray-400 italic">No variables defined.</p>
+              </template>
+              <template x-if="g.variables && g.variables.length > 0">
+                <table class="w-full text-xs">
+                  <thead class="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th class="px-5 py-2 text-left font-medium text-gray-500 uppercase tracking-wide">Key</th>
+                      <th class="px-5 py-2 text-left font-medium text-gray-500 uppercase tracking-wide">Type</th>
+                      <th class="px-5 py-2 text-left font-medium text-gray-500 uppercase tracking-wide">Value</th>
+                      <th class="px-5 py-2 text-left font-medium text-gray-500 uppercase tracking-wide">Sensitive</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-50">
+                    <template x-for="v in g.variables" :key="v.key">
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-5 py-2 font-mono font-semibold text-gray-800" x-text="v.key"></td>
+                        <td class="px-5 py-2">
+                          <span :class="v.type==='terraform' ? 'bg-purple-100 text-purple-700' : 'bg-teal-100 text-teal-700'"
+                                class="inline-flex items-center px-1.5 py-0.5 rounded font-semibold">
+                            <span x-text="v.type==='terraform' ? 'TF_VAR_*' : 'env'"></span>
+                          </span>
+                        </td>
+                        <td class="px-5 py-2 font-mono text-gray-600">
+                          <template x-if="v.sensitive">
+                            <span class="inline-flex items-center gap-1 text-gray-400 italic">
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                              </svg>
+                              hidden
+                            </span>
+                          </template>
+                          <template x-if="!v.sensitive">
+                            <span x-text="v.value || '—'"></span>
+                          </template>
+                        </td>
+                        <td class="px-5 py-2">
+                          <template x-if="v.sensitive">
+                            <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                              </svg>
+                              sensitive
+                            </span>
+                          </template>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </template>
+            </div>
+
+          </div>
+        </template>
+      </div>
+    </template>
+
+    {# ====== CREATE / EDIT GROUP MODAL ====== #}
+    <div x-show="showGroupModal" x-transition.opacity
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+         @keydown.escape.window="showGroupModal=false">
+      <div @click.stop
+           class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 class="font-semibold text-gray-900" x-text="editingGroup ? 'Edit Variable Group' : 'New Variable Group'"></h3>
+          <button @click="showGroupModal=false" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="px-6 py-5 overflow-y-auto space-y-5 flex-1">
+
+          {# name + description #}
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-gray-700 mb-1">Name <span class="text-red-500">*</span></label>
+              <input x-model="form.name" type="text" placeholder="my-variables"
+                     class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-tf-400">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700 mb-1">Description</label>
+              <input x-model="form.description" type="text" placeholder="Optional description"
+                     class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-tf-400">
+            </div>
+          </div>
+
+          {# scope: global or this workspace only #}
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-2">Scope</label>
+            <div class="grid grid-cols-2 gap-2">
+              <label :class="!form.global_scope ? 'border-tf-400 bg-tf-50 ring-1 ring-tf-300' : 'border-gray-200 bg-white hover:bg-gray-50'"
+                     class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors">
+                <input type="radio" :checked="!form.global_scope" @change="form.global_scope=false" class="mt-0.5 text-tf-600">
+                <div>
+                  <p class="text-sm font-medium text-gray-800">This workspace</p>
+                  <p class="text-xs text-gray-500 mt-0.5">Only applied here. Overrides global variables with the same key.</p>
+                </div>
+              </label>
+              <label :class="form.global_scope ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-300' : 'border-gray-200 bg-white hover:bg-gray-50'"
+                     class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors">
+                <input type="radio" :checked="form.global_scope" @change="form.global_scope=true" class="mt-0.5 text-blue-600">
+                <div>
+                  <p class="text-sm font-medium text-gray-800">All workspaces <span class="text-xs text-blue-600 font-normal">(global)</span></p>
+                  <p class="text-xs text-gray-500 mt-0.5">Applied to every workspace. Can be overridden by workspace-scoped groups.</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {# variables list #}
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-medium text-gray-700">Variables</label>
+              <button type="button" @click="addVar()" class="text-xs text-tf-600 hover:text-tf-700 font-medium flex items-center gap-0.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                </svg>
+                Add variable
+              </button>
+            </div>
+
+            <template x-if="form.variables.length === 0">
+              <p class="text-xs text-gray-400 italic py-2">No variables yet. Click "Add variable".</p>
+            </template>
+
+            <div class="space-y-2">
+              <template x-for="(v, idx) in form.variables" :key="idx">
+                <div class="grid grid-cols-12 gap-2 items-start bg-gray-50 rounded-lg px-3 py-2">
+                  {# key #}
+                  <div class="col-span-3">
+                    <input x-model="v.key" type="text" placeholder="KEY"
+                           class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-tf-400">
+                  </div>
+                  {# type #}
+                  <div class="col-span-2">
+                    <select x-model="v.type"
+                            class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-tf-400">
+                      <option value="terraform">TF_VAR_*</option>
+                      <option value="env">env</option>
+                    </select>
+                  </div>
+                  {# value or placeholder if sensitive existing #}
+                  <div class="col-span-5">
+                    <input x-model="v.value"
+                           :type="v.sensitive ? 'password' : 'text'"
+                           :placeholder="v.sensitive && v._existing ? 'Leave blank to keep current' : 'value'"
+                           class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-tf-400">
+                  </div>
+                  {# sensitive toggle #}
+                  <div class="col-span-1 flex items-center justify-center pt-1.5"
+                       :title="hasPassword
+                         ? 'Cifrado en reposo y enmascarado en logs. Aviso: si se elimina la contraseña del portal, estas variables dejarán de estar disponibles.'
+                         : 'Establece una contraseña de portal para usar variables sensibles'">
+                    <input type="checkbox" x-model="v.sensitive" :disabled="!hasPassword"
+                           class="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400 disabled:opacity-40 cursor-pointer">
+                  </div>
+                  {# remove #}
+                  <div class="col-span-1 flex items-center justify-center pt-1">
+                    <button type="button" @click="form.variables.splice(idx,1)"
+                            class="text-gray-300 hover:text-red-500 transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </template>
+            </div>
+            {# column headers hint #}
+            <div x-show="form.variables.length > 0"
+                 class="grid grid-cols-12 gap-2 px-3 mt-1 text-xs text-gray-400">
+              <span class="col-span-3">Key</span>
+              <span class="col-span-2">Type</span>
+              <span class="col-span-5">Value</span>
+              <span class="col-span-1 text-center">🔒</span>
+              <span class="col-span-1"></span>
+            </div>
+          </div>
+
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+          <div>
+            <template x-if="editingGroup">
+              <button @click="deleteGroup(editingGroup.id)"
+                      class="text-xs text-red-500 hover:text-red-700 font-medium">Delete group</button>
+            </template>
+          </div>
+          <div class="flex gap-3">
+            <button @click="showGroupModal=false" class="btn-secondary text-xs">Cancel</button>
+            <button @click="saveGroup()" :disabled="saving"
+                    class="btn-primary text-xs" :class="saving ? 'opacity-60 cursor-wait' : ''">
+              <span x-text="saving ? 'Saving…' : (editingGroup ? 'Save changes' : 'Create group')"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ====== ASSIGN EXISTING GROUP MODAL ====== #}
+    <div x-show="showAssignModal" x-transition.opacity
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+         @keydown.escape.window="showAssignModal=false">
+      <div @click.stop class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 class="font-semibold text-gray-900">Assign Variable Group</h3>
+          <button @click="showAssignModal=false" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="px-6 py-4">
+          <template x-if="unassignedGroups.length === 0">
+            <p class="text-sm text-gray-400 italic">All available groups are already assigned.</p>
+          </template>
+          <div class="space-y-2 max-h-72 overflow-y-auto">
+            <template x-for="g in unassignedGroups" :key="g.id">
+              <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                <input type="checkbox" :value="g.id" x-model="toAssign"
+                       class="w-4 h-4 rounded border-gray-300 text-tf-600 focus:ring-tf-500">
+                <div>
+                  <p class="text-sm font-medium text-gray-800" x-text="g.name"></p>
+                  <p class="text-xs text-gray-400" x-text="g.description || `${(g.variables||[]).length} variable(s)`"></p>
+                </div>
+              </label>
+            </template>
+          </div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <button @click="showAssignModal=false" class="btn-secondary text-xs">Cancel</button>
+          <button @click="doAssign()" :disabled="toAssign.length===0||saving"
+                  class="btn-primary text-xs" :class="(toAssign.length===0||saving)?'opacity-60 cursor-not-allowed':''">
+            <span x-text="saving ? 'Assigning…' : `Assign (${toAssign.length})`"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {# ---- error banner ---- #}
+    <template x-if="errorMsg">
+      <div class="mt-4 flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span x-text="errorMsg" class="flex-1"></span>
+        <button x-show="loadError"
+                @click="errorMsg=''; loadError=false; loaded=false"
+                class="text-xs font-medium text-red-600 hover:text-red-800 underline">Retry</button>
+      </div>
+    </template>
+
+  </div><!-- /varGroupsTab -->
+  </div><!-- /groups sub-tab -->
+
+    <!-- ── Sub-tab: Individual Variables ────────────────────────── -->
+    <div x-show="varsSubTab === 'vars'" x-transition>
+    <div x-data="workspaceVarsTab('{{ workspace.id }}', {{ 'true' if config.lock_password_hash else 'false' }})"
+         x-init="load()">
+
+      {# ---- no-password warning ---- #}
+      {% if not config.lock_password_hash %}
+      <div class="mb-4 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
+        <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span><strong>Sensitive variables unavailable.</strong>
+          A portal password is required to encrypt/decrypt sensitive values.
+          Set one in <a href="/settings" class="underline font-medium">Settings → Portal Security</a>.</span>
+      </div>
+      {% endif %}
+
+      {# ---- toolbar ---- #}
+      <div class="flex items-center justify-between mb-4 gap-3">
+        <div>
+          <h3 class="font-semibold text-gray-900">Workspace Variables</h3>
+          <p class="text-xs text-gray-400 mt-0.5">Variables scoped to this workspace only. Injected on every run.</p>
+        </div>
+        <button @click="addVar()"
+                class="btn-primary text-xs flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+          Add variable
+        </button>
+      </div>
+
+      {# ---- loading ---- #}
+      <template x-if="loading">
+        <div class="py-10 text-center text-gray-400 text-sm">Loading…</div>
+      </template>
+
+      {# ---- table ---- #}
+      <template x-if="!loading">
+        <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <template x-if="variables.length === 0">
+            <div class="py-12 text-center text-gray-400">
+              <svg class="mx-auto w-10 h-10 mb-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h10"/>
+              </svg>
+              <p class="font-medium">No variables defined</p>
+              <p class="text-xs mt-1">Click "Add variable" to create one.</p>
+            </div>
+          </template>
+          <template x-if="variables.length > 0">
+            <div>
+              <div class="grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                <span class="col-span-3">Key</span>
+                <span class="col-span-2">Type</span>
+                <span class="col-span-5">Value</span>
+                <span class="col-span-1 text-center" title="Sensitive">🔒</span>
+                <span class="col-span-1"></span>
+              </div>
+              <div class="divide-y divide-gray-50">
+                <template x-for="(v, idx) in variables" :key="idx">
+                  <div class="grid grid-cols-12 gap-2 px-4 py-2 items-center hover:bg-gray-50">
+                    <div class="col-span-3">
+                      <input x-model="v.key" type="text" placeholder="KEY"
+                             class="w-full px-2 py-1.5 border border-gray-200 rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-tf-400">
+                    </div>
+                    <div class="col-span-2">
+                      <select x-model="v.type"
+                              class="w-full px-2 py-1.5 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-tf-400">
+                        <option value="terraform">TF_VAR_*</option>
+                        <option value="env">env</option>
+                      </select>
+                    </div>
+                    <div class="col-span-5">
+                      <input x-model="v.value"
+                             :type="v.sensitive ? 'password' : 'text'"
+                             :placeholder="v.sensitive && v._existing ? 'Leave blank to keep current' : 'value'"
+                             class="w-full px-2 py-1.5 border border-gray-200 rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-tf-400">
+                    </div>
+                    <div class="col-span-1 flex items-center justify-center"
+                         :title="hasPassword ? 'Encrypt at rest. Warning: removing portal password will make sensitive vars unavailable.' : 'Set a portal password to use sensitive variables'">
+                      <input type="checkbox" x-model="v.sensitive" :disabled="!hasPassword"
+                             class="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400 disabled:opacity-40 cursor-pointer">
+                    </div>
+                    <div class="col-span-1 flex items-center justify-center">
+                      <button type="button" @click="variables.splice(idx,1)"
+                              class="text-gray-300 hover:text-red-500 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      {# ---- save / error ---- #}
+      <div class="mt-4 flex items-center justify-between gap-3">
+        <template x-if="errorMsg">
+          <div class="flex items-center gap-2 text-sm text-red-600">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span x-text="errorMsg"></span>
+          </div>
+        </template>
+        <template x-if="savedOk">
+          <span class="text-sm text-green-600 flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+            </svg>
+            Saved
+          </span>
+        </template>
+        <div class="ml-auto">
+          <button @click="save()" :disabled="saving"
+                  class="btn-primary text-xs" :class="saving ? 'opacity-60 cursor-wait' : ''">
+            <span x-text="saving ? 'Saving…' : 'Save variables'"></span>
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /workspaceVarsTab -->
+    </div><!-- /vars sub-tab -->
+
+  </div><!-- /vars tab x-show -->
 
   <!-- ================================================================
        TAB: OUTPUT
@@ -410,13 +910,82 @@
 
     <!-- Expanded run detail panel -->
     <div x-show="selectedRunId" x-transition class="mt-5 bg-white rounded-xl border border-gray-200 overflow-hidden">
+
+      <!-- Panel header -->
       <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h3 class="font-semibold text-gray-900">Run Logs</h3>
+        <h3 class="font-semibold text-gray-900">Run Detail</h3>
         <button @click="selectedRunId = null" class="text-gray-400 hover:text-gray-600">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
           </svg>
         </button>
+      </div>
+
+      <!-- ── Values ── -->
+      <div class="border-b border-gray-100">
+        <div class="px-6 py-3 flex items-center space-x-2">
+          <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2
+                     M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+          <span class="text-sm font-semibold text-gray-700">Values</span>
+          <span class="text-xs text-gray-400"
+                x-text="runParams.length ? runParams.length + ' variable' + (runParams.length !== 1 ? 's' : '') : ''">
+          </span>
+        </div>
+        <template x-if="runParams.length > 0">
+          <div class="px-6 pb-4 overflow-x-auto">
+            <table class="w-full text-xs border-separate border-spacing-0">
+              <thead>
+                <tr>
+                  <th class="text-left pb-2 pr-6 text-gray-400 font-medium">Variable</th>
+                  <th class="text-left pb-2 pr-6 text-gray-400 font-medium">Value</th>
+                  <th class="text-left pb-2 pr-6 text-gray-400 font-medium">Source</th>
+                  <th class="text-left pb-2 text-gray-400 font-medium">File</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="p in runParams" :key="p.env_key + '_' + p.source">
+                  <tr class="border-t border-gray-50">
+                    <td class="py-1.5 pr-6 font-mono text-gray-700" x-text="p.key"></td>
+                    <td class="py-1.5 pr-6 font-mono max-w-xs truncate"
+                        :class="p.sensitive ? 'text-gray-400 italic' : 'text-gray-900'"
+                        :title="p.sensitive ? '(sensitive)' : p.value"
+                        x-text="p.value"></td>
+                    <td class="py-1.5 pr-6">
+                      <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
+                            :class="{
+                              'bg-blue-50 text-blue-700':    p.source === 'workspace',
+                              'bg-purple-50 text-purple-700': p.source === 'carpeta',
+                              'bg-amber-50 text-amber-700':  p.source === 'env',
+                              'bg-green-50 text-green-700':  p.source === 'tfvars',
+                              'bg-gray-100 text-gray-500':   p.source === 'default',
+                            }"
+                            x-text="p.source"></span>
+                    </td>
+                    <td class="py-1.5 text-gray-400 font-mono" x-text="p.file || '\u2014'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </template>
+        <div x-show="!runParams.length"
+             class="px-6 pb-4 text-xs text-gray-400">
+          No variable data recorded for this run.
+        </div>
+      </div>
+
+      <!-- ── Run Logs ── -->
+      <div class="px-6 py-3 border-b border-gray-100 flex items-center justify-between">
+        <span class="text-sm font-semibold text-gray-700 flex items-center space-x-2">
+          <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+          <span>Run Logs</span>
+        </span>
       </div>
       <div id="log-output"
            class="bg-gray-950 text-green-400 font-mono text-xs p-4 h-80 overflow-y-auto whitespace-pre-wrap">
@@ -822,21 +1391,7 @@
       <template x-if="sentinelResult">
         <div>
           <!-- Overall result banner -->
-          <div x-data="{
-            get totalPolicies() { return (sentinelResult.results || []).length; },
-            get failedBlocking() {
-              return (sentinelResult.results || []).filter(r =>
-                !r.passed && r.enforcement_level !== 'advisory'
-              ).length;
-            },
-            get failedAdvisory() {
-              return (sentinelResult.results || []).filter(r =>
-                !r.passed && r.enforcement_level === 'advisory'
-              ).length;
-            },
-            get passedCount() { return (sentinelResult.results || []).filter(r => r.passed).length; },
-          }"
-               class="px-6 py-4 border-b border-gray-100"
+          <div class="px-6 py-4 border-b border-gray-100"
                :class="sentinelResult.passed ? 'bg-green-50' : 'bg-red-50'">
 
             <div class="flex items-start space-x-3">
@@ -863,37 +1418,37 @@
                     <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                     </svg>
-                    <span x-text="`${totalPolicies} ${totalPolicies === 1 ? 'policy' : 'policies'} checked`"></span>
+                    <span x-text="`${(sentinelResult.results||[]).length} ${(sentinelResult.results||[]).length === 1 ? 'policy' : 'policies'} checked`"></span>
                   </span>
 
                   <span class="inline-flex items-center space-x-1 text-xs font-medium text-green-700">
                     <svg class="w-3.5 h-3.5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                       <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                     </svg>
-                    <span x-text="`${passedCount} passed`"></span>
+                    <span x-text="`${(sentinelResult.results||[]).filter(r=>r.passed).length} passed`"></span>
                   </span>
 
-                  <template x-if="failedBlocking > 0">
+                  <template x-if="(sentinelResult.results||[]).filter(r=>!r.passed && r.enforcement_level!=='advisory').length > 0">
                     <span class="inline-flex items-center space-x-1 text-xs font-medium text-red-700">
                       <svg class="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
                       </svg>
-                      <span x-text="`${failedBlocking} failed (blocking)`"></span>
+                      <span x-text="`${(sentinelResult.results||[]).filter(r=>!r.passed && r.enforcement_level!=='advisory').length} failed (blocking)`"></span>
                     </span>
                   </template>
 
-                  <template x-if="failedAdvisory > 0">
+                  <template x-if="(sentinelResult.results||[]).filter(r=>!r.passed && r.enforcement_level==='advisory').length > 0">
                     <span class="inline-flex items-center space-x-1 text-xs font-medium text-amber-700">
                       <svg class="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
                       </svg>
-                      <span x-text="`${failedAdvisory} advisory`"></span>
+                      <span x-text="`${(sentinelResult.results||[]).filter(r=>!r.passed && r.enforcement_level==='advisory').length} advisory`"></span>
                     </span>
                   </template>
                 </div>
 
                 <!-- Failing policy names (blocking only) -->
-                <template x-if="failedBlocking > 0">
+                <template x-if="(sentinelResult.results||[]).filter(r=>!r.passed && r.enforcement_level!=='advisory').length > 0">
                   <div class="mt-2 flex flex-wrap gap-1.5">
                     <template x-for="r in (sentinelResult.results || []).filter(r => !r.passed && r.enforcement_level !== 'advisory')" :key="r.policy">
                       <span class="inline-flex items-center space-x-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-mono">
@@ -1448,15 +2003,289 @@ const PROVIDERS = {{ workspace.providers | tojson }};
 const SENTINEL_EXTRA_POLICIES_INITIAL = {{ sentinel_extra_policies | tojson }};
 const SENTINEL_EXTRA_SETS_INITIAL = {{ sentinel_extra_sets | tojson }};
 
+// ---------------------------------------------------------------------------
+// Variable Groups tab component
+// ---------------------------------------------------------------------------
+function varGroupsTab(workspaceId, hasPassword, initialTab) {
+  return {
+    workspaceId,
+    hasPassword,
+    initialTab,
+    groups: [],        // groups applied to this workspace
+    allGroups: [],     // all existing groups (for assign dialog)
+    loaded: false,
+    loading: false,
+    loadError: false,
+    saving: false,
+    errorMsg: '',
+
+    get sortedGroups() {
+      // Globals first (lower priority), then workspace-local (overrides)
+      const local  = this.groups.filter(g => this.isLocal(g));
+      const global = this.groups.filter(g => !this.isLocal(g));
+      return [...global, ...local];
+    },
+
+    isLocal(g) {
+      const ids = g.workspace_ids || [];
+      return ids.includes(this.workspaceId) && !ids.includes('*');
+    },
+
+    // Create / edit modal
+    showGroupModal: false,
+    editingGroup: null,
+    form: { name: '', description: '', global_scope: false, variables: [] },
+
+    // Assign existing modal
+    showAssignModal: false,
+    toAssign: [],
+
+    get unassignedGroups() {
+      const assigned = new Set(this.groups.map(g => g.id));
+      return this.allGroups.filter(g => !assigned.has(g.id));
+    },
+
+    async load() {
+      this.loading = true;
+      this.errorMsg = '';
+      try {
+        const [wsRes, allRes] = await Promise.all([
+          fetch(`/api/variable-groups?workspace_id=${workspaceId}`),
+          fetch('/api/variable-groups/all'),
+        ]);
+        const wsData  = await wsRes.json();
+        const allData = await allRes.json();
+        this.groups    = (wsData.groups  || []).map(g => ({ ...g, _open: false }));
+        this.allGroups = allData.groups  || [];
+        this.loaded = true;
+        this.loadError = false;
+      } catch (e) {
+        this.errorMsg = 'Failed to load variable groups.';
+        this.loadError = true;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    openCreate() {
+      this.editingGroup = null;
+      this.form = { name: '', description: '', global_scope: false, variables: [] };
+      this.showGroupModal = true;
+    },
+
+    editGroup(g) {
+      this.editingGroup = g;
+      this.form = {
+        name: g.name,
+        description: g.description || '',
+        global_scope: (g.workspace_ids || []).includes('*'),
+        variables: (g.variables || []).map(v => ({
+          ...v,
+          value: '',           // never pre-fill values
+          _existing: true,     // flag to show "leave blank to keep" hint
+        })),
+      };
+      this.showGroupModal = true;
+    },
+
+    addVar() {
+      this.form.variables.push({
+        key: '', value: '', type: 'terraform', sensitive: false, description: '', _existing: false,
+      });
+    },
+
+    async saveGroup() {
+      if (!this.form.name.trim()) {
+        this.errorMsg = 'Group name is required.'; return;
+      }
+      this.saving = true; this.errorMsg = '';
+      const payload = {
+        name: this.form.name.trim(),
+        description: this.form.description.trim(),
+        workspace_ids: this.form.global_scope ? ['*'] : [workspaceId],
+        variables: this.form.variables.map(v => ({
+          key: v.key.trim(),
+          value: v.value,
+          type: v.type || 'terraform',
+          sensitive: !!v.sensitive,
+          description: v.description || '',
+        })).filter(v => v.key),
+      };
+      try {
+        let res, data;
+        if (this.editingGroup) {
+          payload.id = this.editingGroup.id;
+          res  = await fetch(`/api/variable-groups/${this.editingGroup.id}`, {
+            method: 'PUT', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(payload),
+          });
+          data = await res.json();
+        } else {
+          res  = await fetch('/api/variable-groups', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(payload),
+          });
+          data = await res.json();
+        }
+        if (!res.ok || data.ok === false) {
+          this.errorMsg = data.error || 'Save failed.';
+        } else {
+          this.showGroupModal = false;
+          await this.load();
+        }
+      } catch (e) {
+        this.errorMsg = 'Network error.';
+      } finally {
+        this.saving = false;
+      }
+    },
+
+    async deleteGroup(groupId) {
+      if (!confirm('Delete this variable group? This cannot be undone.')) return;
+      this.saving = true; this.errorMsg = '';
+      try {
+        await fetch(`/api/variable-groups/${groupId}`, { method: 'DELETE' });
+        this.showGroupModal = false;
+        await this.load();
+      } catch (e) {
+        this.errorMsg = 'Delete failed.';
+      } finally {
+        this.saving = false;
+      }
+    },
+
+    async unassignGroup(g) {
+      if (!confirm(`Remove group "${g.name}" from this workspace?`)) return;
+      // Remove workspaceId from workspace_ids and save
+      const updated = {
+        ...g,
+        workspace_ids: (g.workspace_ids || []).filter(id => id !== workspaceId && id !== '*'),
+        variables: (g.variables || []).map(v => ({ ...v, value: '' })), // keep encrypted blobs
+      };
+      this.saving = true; this.errorMsg = '';
+      try {
+        // Use the PUT route; send no variable values (empty = keep existing)
+        const res  = await fetch(`/api/variable-groups/${g.id}`, {
+          method: 'PUT', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(updated),
+        });
+        if (!res.ok) { const d = await res.json(); this.errorMsg = d.error || 'Unassign failed.'; }
+        else { await this.load(); }
+      } catch (e) {
+        this.errorMsg = 'Network error.';
+      } finally {
+        this.saving = false;
+      }
+    },
+
+    openAssign() {
+      this.toAssign = [];
+      this.showAssignModal = true;
+    },
+
+    async doAssign() {
+      if (this.toAssign.length === 0) return;
+      this.saving = true; this.errorMsg = '';
+      try {
+        for (const groupId of this.toAssign) {
+          const g = this.allGroups.find(x => x.id === groupId);
+          if (!g) continue;
+          const wsIds = [...new Set([...(g.workspace_ids || []), workspaceId])];
+          await fetch(`/api/variable-groups/${groupId}`, {
+            method: 'PUT', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+              ...g,
+              workspace_ids: wsIds,
+              variables: (g.variables || []).map(v => ({ ...v, value: '' })),
+            }),
+          });
+        }
+        this.showAssignModal = false;
+        await this.load();
+      } catch (e) {
+        this.errorMsg = 'Network error.';
+      } finally {
+        this.saving = false;
+      }
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Workspace individual variables tab
+// ---------------------------------------------------------------------------
+function workspaceVarsTab(workspaceId, hasPassword) {
+  return {
+    workspaceId,
+    hasPassword,
+    variables: [],
+    loading: false,
+    saving: false,
+    savedOk: false,
+    errorMsg: '',
+
+    async load() {
+      this.loading = true;
+      try {
+        const r = await fetch(`/api/workspace/${workspaceId}/vars`);
+        const d = await r.json();
+        this.variables = (d.variables || []).map(v => ({ ...v, _existing: !!v.sensitive }));
+      } catch (e) {
+        this.errorMsg = 'Failed to load variables.';
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    addVar() {
+      this.variables.push({ key: '', value: '', type: 'terraform', sensitive: false, _existing: false });
+    },
+
+    async save() {
+      this.saving = true; this.errorMsg = ''; this.savedOk = false;
+      try {
+        const payload = this.variables
+          .filter(v => v.key.trim())
+          .map(v => ({
+            key: v.key.trim(),
+            value: v.value || '',
+            type: v.type || 'terraform',
+            sensitive: !!v.sensitive,
+            description: v.description || '',
+          }));
+        const r = await fetch(`/api/workspace/${workspaceId}/vars`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ variables: payload }),
+        });
+        const d = await r.json();
+        if (!r.ok || d.ok === false) {
+          this.errorMsg = d.error || 'Save failed.';
+        } else {
+          this.savedOk = true;
+          await this.load();
+          setTimeout(() => { this.savedOk = false; }, 3000);
+        }
+      } catch (e) {
+        this.errorMsg = 'Network error.';
+      } finally {
+        this.saving = false;
+      }
+    },
+  };
+}
+
 function workspacePage(workspaceId) {
   return {
     activeTab: '{{ active_tab }}',
+    varsSubTab: 'groups',
     // Run tracking
     runList: [],
     runsLoaded: false,
     runsLoading: false,
     selectedRunId: null,
     runLogs: [],
+    runParams: [],
     gitPulling: false,
     // Runs pagination
     runsPage: 1,
@@ -1554,6 +2383,7 @@ function workspacePage(workspaceId) {
       if (tab === 'graph')  this.loadGraph();
       if (tab === 'runs' && !this.runsLoaded) this.loadRuns();
       if (tab === 'sentinel') this.loadSentinelConfig();
+      if (tab === 'vars') window.dispatchEvent(new CustomEvent('tgm-load-vars'));
     },
 
     setupSocket() {
@@ -1585,6 +2415,7 @@ function workspacePage(workspaceId) {
         if (data.execution_id === this.selectedRunId &&
             (data.status === 'completed' || data.status === 'failed')) {
           this.loadRunLogs(data.execution_id);
+          this.loadRunParams(data.execution_id);
         }
       });
     },
@@ -1592,8 +2423,20 @@ function workspacePage(workspaceId) {
     selectRun(runId) {
       this.selectedRunId = runId;
       this.runLogs = [];
+      this.runParams = [];
       this.activeTab = 'runs';
       this.loadRunLogs(runId);
+      this.loadRunParams(runId);
+    },
+
+    async loadRunParams(runId) {
+      try {
+        const res = await fetch(`/api/executions/${runId}`);
+        const data = await res.json();
+        this.runParams = data.run_params || [];
+      } catch (e) {
+        this.runParams = [];
+      }
     },
 
     async loadRunLogs(runId) {
