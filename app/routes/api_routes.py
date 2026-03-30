@@ -295,7 +295,8 @@ def workspace_resource_history(workspace_id: str):
     try:
         from app.storage import get_backend
         backend = get_backend()
-        history = backend.get_resource_history(workspace_id) if hasattr(backend, "get_resource_history") else {}
+        getter = getattr(backend, "get_resource_history", None)
+        history = getter(workspace_id) if getter else {}
     except Exception:
         history = {}
 
