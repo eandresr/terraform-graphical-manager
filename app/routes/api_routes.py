@@ -283,6 +283,26 @@ def workspace_state(workspace_id: str):
 
 
 # -------------------------------------------------------------------------
+# Resource history (run tracking per resource)
+# -------------------------------------------------------------------------
+
+@api_bp.route("/workspace/<workspace_id>/resource-history")
+def workspace_resource_history(workspace_id: str):
+    workspace = _get_workspace_or_404(workspace_id)
+    if workspace is None:
+        return jsonify({"error": "Workspace not found"}), 404
+
+    try:
+        from app.storage import get_backend
+        backend = get_backend()
+        history = backend.get_resource_history(workspace_id) if hasattr(backend, "get_resource_history") else {}
+    except Exception:
+        history = {}
+
+    return jsonify(history)
+
+
+# -------------------------------------------------------------------------
 # Terraform graph
 # -------------------------------------------------------------------------
 
@@ -931,6 +951,121 @@ def _parse_dot(dot_output: str) -> Dict:
 # -------------------------------------------------------------------------
 # Workspace-level individual variables (stored in workspace_config)
 # -------------------------------------------------------------------------
+
+@api_bp.route("/workspace/<workspace_id>/tfvars-files", methods=["GET"])
+def get_workspace_tfvars_files(workspace_id: str):
+    """
+    Return all variable sources for the workspace priority view:
+      - auto:    terraform.tfvars, *.auto.tfvars (always applied)
+      - manual:  other .tfvars files
+      - defaults: variable block defaults from .tf files
+      - groups:  Variable Groups applied to this workspace (TF_VAR_* priority)
+      - ws_vars: per-workspace individual variables (TF_VAR_* priority)
+    """
+    import os as _os
+    from app.variable_groups import list_all_groups
+    from app.storage import get_backend as _get_backend
+
+    workspace = _get_workspace_or_404(workspace_id)
+    if workspace is None:
+        return jsonify({"error": "Workspace not found"}), 404
+
+    ws_path = workspace["abs_path"]
+
+    def _is_auto(fname: str) -> bool:
+        return (
+            fname in ("terraform.tfvars", "terraform.tfvars.json")
+            or fname.endswith(".auto.tfvars")
+            or fname.endswith(".auto.tfvars.json")
+        )
+
+    try:
+        fnames = sorted(
+            f for f in _os.listdir(ws_path)
+            if f.endswith(".tfvars") or f.endswith(".tfvars.json")
+        )
+    except OSError:
+        fnames = []
+
+    all_entries = _scan_tfvars_values(ws_path)
+    entries_by_file: Dict[str, list] = {}
+    for e in all_entries:
+        entries_by_file.setdefault(e["file"], []).append(
+            {"key": e["key"], "value": e["value"]}
+        )
+
+    auto_files = []
+    manual_files = []
+    for fname in fnames:
+        item = {"name": fname, "vars": entries_by_file.get(fname, [])}
+        if _is_auto(fname):
+            auto_files.append(item)
+        else:
+            manual_files.append(item)
+
+    defaults = _scan_variable_defaults(ws_path)
+    default_entries = [
+        {"key": k, "value": v} for k, v in sorted(defaults.items())
+    ]
+
+    # Variable Groups applied to this workspace (injected as TF_VAR_* — top priority)
+    groups_out = []
+    try:
+        all_groups = list_all_groups()
+        applicable = [
+            g for g in all_groups
+            if g.get("workspace_ids") == ["*"]
+            or workspace_id in (g.get("workspace_ids") or [])
+        ]
+        for g in applicable:
+            vars_out = []
+            for v in g.get("variables", []):
+                key = (v.get("key") or "").strip()
+                if not key:
+                    continue
+                var_type = v.get("type", "terraform")
+                if var_type != "terraform":
+                    continue   # only TF_VAR_* vars affect variable values
+                is_sensitive = v.get("sensitive", False)
+                if is_sensitive:
+                    display = "***"
+                else:
+                    display = v.get("value") or ""
+                vars_out.append({"key": key, "value": display, "sensitive": is_sensitive})
+            if vars_out:
+                scope = "global" if g.get("workspace_ids") == ["*"] else "workspace"
+                groups_out.append({
+                    "name": g.get("name", ""),
+                    "scope": scope,
+                    "vars": vars_out,
+                })
+    except Exception:
+        pass
+
+    # Per-workspace individual variables (also TF_VAR_* — top priority)
+    ws_vars_out = []
+    try:
+        cfg = _get_backend().get_workspace_config(workspace_id)
+        for v in cfg.get("variables", []):
+            key = (v.get("key") or "").strip()
+            if not key or v.get("type", "terraform") != "terraform":
+                continue
+            ws_vars_out.append({
+                "key": key,
+                "value": "***" if v.get("sensitive") else (v.get("value") or ""),
+                "sensitive": v.get("sensitive", False),
+            })
+    except Exception:
+        pass
+
+    return jsonify({
+        "auto": auto_files,
+        "manual": manual_files,
+        "defaults": default_entries,
+        "groups": groups_out,
+        "ws_vars": ws_vars_out,
+    })
+
 
 @api_bp.route("/workspace/<workspace_id>/vars", methods=["GET"])
 def get_workspace_vars(workspace_id: str):

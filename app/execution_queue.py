@@ -277,13 +277,25 @@ class ExecutionQueue:
                 self._do_plan(runner, execution, workdir, log)
 
             elif execution.command == "apply":
+                _before = runner.state_pull() or {}
+                from app.resource_tracker import build_snapshot
+                snap_before = build_snapshot(_before)
                 self._do_apply(runner, execution, workdir, log)
+                _after = runner.state_pull() or {}
+                snap_after = build_snapshot(_after)
+                self._track_changes(execution, snap_before, snap_after)
 
             elif execution.command == "destroy":
+                _before = runner.state_pull() or {}
+                from app.resource_tracker import build_snapshot
+                snap_before = build_snapshot(_before)
                 log("=== terraform destroy ===")
                 ok = runner.destroy(log)
                 if not ok:
                     raise RuntimeError("terraform destroy failed")
+                _after = runner.state_pull() or {}
+                snap_after = build_snapshot(_after)
+                self._track_changes(execution, snap_before, snap_after)
 
             # Sentinel check (after plan JSON is available)
             from flask import current_app
@@ -453,6 +465,20 @@ class ExecutionQueue:
     # ------------------------------------------------------------------
     # Cloud storage
     # ------------------------------------------------------------------
+
+    def _track_changes(self, execution: Execution, snap_before, snap_after) -> None:
+        """Diff state snapshots and persist resource history."""
+        try:
+            from app.resource_tracker import diff_snapshots, record_run_changes
+            changes = diff_snapshots(snap_before, snap_after)
+            record_run_changes(
+                execution.workspace_id,
+                execution.id,
+                execution.timestamp,
+                changes,
+            )
+        except Exception:
+            pass
 
     def _store_execution(self, execution: Execution) -> None:
         try:

@@ -1,0 +1,26 @@
+{%- macro provider_code(p) -%}
+{%- set codes = {
+  'aws':          'AWS',
+  'azurerm':      'AZR',
+  'azure':        'AZR',
+  'google':       'GCP',
+  'oci':          'OCI',
+  'alicloud':     'ALI',
+  'ibm':          'IBM',
+  'kubernetes':   'K8S',
+  'helm':         'K8S',
+  'vsphere':      'VMW',
+  'openstack':    'OST',
+  'digitalocean': 'DGO',
+  'linode':       'LIN',
+  'cloudflare':   'CLF',
+  'datadog':      'DDG',
+  'github':       'GHB',
+  'vault':        'VLT',
+  'hcloud':       'HCL',
+  'ovh':          'OVH',
+  'scaleway':     'SCW',
+  'exoscale':     'EXO'
+} -%}
+{%- if p in codes %}{{ codes[p] }}{%- else %}{{ (p | upper)[0:3] }}{%- endif -%}
+{%- endmacro %}

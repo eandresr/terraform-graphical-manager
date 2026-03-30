@@ -1,3 +1,4 @@
+{% from "_macros.html" import provider_code %}
 <!DOCTYPE html>
 <html lang="en" x-data="{ mobileMenuOpen: false }">
 <head>
@@ -138,7 +139,7 @@
                     {% if node.workspace.providers %}
                       <div class="flex space-x-1 ml-auto flex-shrink-0">
                         {% for p in node.workspace.providers %}
-                          <span class="provider-badge provider-{{ p }}">{{ p[:2].upper() }}</span>
+                          <span class="provider-badge provider-{{ p }}" title="{{ p }}">{{ provider_code(p) }}</span>
                         {% endfor %}
                       </div>
                     {% endif %}
@@ -201,7 +202,7 @@
                 {% if ws.providers %}
                   <div class="flex space-x-1 ml-auto flex-shrink-0">
                     {% for p in ws.providers %}
-                      <span class="provider-badge provider-{{ p }}">{{ p[:2].upper() }}</span>
+                      <span class="provider-badge provider-{{ p }}" title="{{ p }}">{{ provider_code(p) }}</span>
                     {% endfor %}
                   </div>
                 {% endif %}

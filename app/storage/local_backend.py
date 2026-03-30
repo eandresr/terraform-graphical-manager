@@ -171,6 +171,19 @@ class LocalBackend:
         self._write_json(os.path.join(ws_dir, "sentinel_last_result.json"), data)
 
     # ------------------------------------------------------------------
+    # Resource history (created/modified per run)
+    # ------------------------------------------------------------------
+
+    def get_resource_history(self, workspace_id: str) -> Dict[str, Any]:
+        path = os.path.join(self._root, "workspaces", workspace_id, "resource_history.json")
+        return self._read_json(path) or {}
+
+    def set_resource_history(self, workspace_id: str, data: Dict[str, Any]) -> None:
+        ws_dir = os.path.join(self._root, "workspaces", workspace_id)
+        os.makedirs(ws_dir, exist_ok=True)
+        self._write_json(os.path.join(ws_dir, "resource_history.json"), data)
+
+    # ------------------------------------------------------------------
     # Variable Groups
     # ------------------------------------------------------------------
 
