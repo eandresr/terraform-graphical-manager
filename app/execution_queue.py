@@ -47,6 +47,13 @@ class Execution:
         self.sentinel_result: Optional[Dict[str, Any]] = None  # populated after plan
         self.sentinel_policies_override: Optional[str] = None  # ws-level extra policies
 
+        # Sensitive variable values (plaintext) — used for log masking only;
+        # never persisted to storage.
+        self.sensitive_values: List[str] = []
+
+        # Structured variable parameters recorded at run submission time.
+        self.run_params: List[Dict[str, Any]] = []
+
         self.timestamp = datetime.datetime.utcnow().isoformat()
         self.status = ExecutionStatus.QUEUED
         self.logs: List[str] = []
@@ -67,6 +74,13 @@ class Execution:
         with self._lock:
             self.logs.append(line)
 
+    def mask(self, line: str) -> str:
+        """Replace each sensitive value with *** in *line*."""
+        for val in self.sensitive_values:
+            if val and val in line:
+                line = line.replace(val, "***")
+        return line
+
     def cancel(self) -> None:
         self._canceled.set()
 
@@ -86,6 +100,7 @@ class Execution:
             "duration_seconds": self.duration_seconds,
             "log_lines": len(self.logs),
             "sentinel_result": self.sentinel_result,
+            "run_params": self.run_params,
         }
 
     @classmethod
@@ -109,7 +124,9 @@ class Execution:
         obj.duration_seconds = meta.get("duration_seconds")
         obj.terraform_binary = meta.get("terraform_binary")
         obj.sentinel_result = meta.get("sentinel_result")
+        obj.run_params = meta.get("run_params") or []
         obj.sentinel_policies_override = None
+        obj.sensitive_values = []
         obj._workdir = None
         obj._canceled = threading.Event()
         obj._lock = threading.Lock()
@@ -235,10 +252,14 @@ class ExecutionQueue:
         execution._workdir = workdir
 
         def log(line: str) -> None:
+            line = execution.mask(line)
             execution.add_log(line)
             self._emit_log(execution, line)
 
         try:
+            ts = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            log(f"=== Run started: {ts}  |  command: {execution.command} ===")
+
             runner = TerraformRunner(
                 execution.workspace_path, execution.env_vars, execution.terraform_binary
             )
@@ -256,7 +277,25 @@ class ExecutionQueue:
                 self._do_plan(runner, execution, workdir, log)
 
             elif execution.command == "apply":
+                _before = runner.state_pull() or {}
+                from app.resource_tracker import build_snapshot
+                snap_before = build_snapshot(_before)
                 self._do_apply(runner, execution, workdir, log)
+                _after = runner.state_pull() or {}
+                snap_after = build_snapshot(_after)
+                self._track_changes(execution, snap_before, snap_after)
+
+            elif execution.command == "destroy":
+                _before = runner.state_pull() or {}
+                from app.resource_tracker import build_snapshot
+                snap_before = build_snapshot(_before)
+                log("=== terraform destroy ===")
+                ok = runner.destroy(log)
+                if not ok:
+                    raise RuntimeError("terraform destroy failed")
+                _after = runner.state_pull() or {}
+                snap_after = build_snapshot(_after)
+                self._track_changes(execution, snap_before, snap_after)
 
             # Sentinel check (after plan JSON is available)
             from flask import current_app
@@ -426,6 +465,20 @@ class ExecutionQueue:
     # ------------------------------------------------------------------
     # Cloud storage
     # ------------------------------------------------------------------
+
+    def _track_changes(self, execution: Execution, snap_before, snap_after) -> None:
+        """Diff state snapshots and persist resource history."""
+        try:
+            from app.resource_tracker import diff_snapshots, record_run_changes
+            changes = diff_snapshots(snap_before, snap_after)
+            record_run_changes(
+                execution.workspace_id,
+                execution.id,
+                execution.timestamp,
+                changes,
+            )
+        except Exception:
+            pass
 
     def _store_execution(self, execution: Execution) -> None:
         try:

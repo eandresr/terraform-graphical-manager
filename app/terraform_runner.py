@@ -70,6 +70,12 @@ class TerraformRunner:
             log_cb,
         )
 
+    def destroy(self, log_cb: LogCallback) -> bool:
+        return self._run(
+            ["destroy", "-no-color", "-input=false", "-auto-approve"],
+            log_cb,
+        )
+
     def state_pull(self) -> Optional[Dict]:
         """Run `terraform state pull` and return parsed JSON."""
         result = self._capture(["state", "pull"])

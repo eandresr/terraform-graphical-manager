@@ -7,6 +7,7 @@ app/auth.py
 app/backend_detector.py
 app/cli.py
 app/config.py
+app/crypto.py
 app/env_validator.py
 app/execution_queue.py
 app/plan_parser.py
@@ -14,6 +15,7 @@ app/provider_detector.py
 app/sentinel_runner.py
 app/state_parser.py
 app/terraform_runner.py
+app/variable_groups.py
 app/version_manager.py
 app/workspace_scanner.py
 app/routes/__init__.py

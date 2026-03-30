@@ -101,6 +101,7 @@ class AzureBackend:
             "providers": execution.providers,
             "backend": execution.backend,
             "terraform_version": execution.terraform_version,
+            "run_params": getattr(execution, "run_params", []),
         }
 
     def _put_json(self, key: str, data: Dict) -> None:

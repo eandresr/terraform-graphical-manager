@@ -5,6 +5,10 @@ terraform-repos*
 # .tfstate files
 *.tfstate
 *.tfstate.*
+.terraform.lock.hcl
+*/.terraform.lock.hcl
+**/.terraform.lock.hcl
+**/.terraform.lock.hcl
 TERRAFORM_GRAPHICAL_BACKEND*
 TERRAFORM_GRAPHICAL_BACKEND/*
 venv*

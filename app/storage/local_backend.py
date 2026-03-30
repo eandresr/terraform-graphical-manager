@@ -170,6 +170,52 @@ class LocalBackend:
         os.makedirs(ws_dir, exist_ok=True)
         self._write_json(os.path.join(ws_dir, "sentinel_last_result.json"), data)
 
+    # ------------------------------------------------------------------
+    # Resource history (created/modified per run)
+    # ------------------------------------------------------------------
+
+    def get_resource_history(self, workspace_id: str) -> Dict[str, Any]:
+        path = os.path.join(self._root, "workspaces", workspace_id, "resource_history.json")
+        return self._read_json(path) or {}
+
+    def set_resource_history(self, workspace_id: str, data: Dict[str, Any]) -> None:
+        ws_dir = os.path.join(self._root, "workspaces", workspace_id)
+        os.makedirs(ws_dir, exist_ok=True)
+        self._write_json(os.path.join(ws_dir, "resource_history.json"), data)
+
+    # ------------------------------------------------------------------
+    # Variable Groups
+    # ------------------------------------------------------------------
+
+    def list_variable_groups(self) -> List[Dict[str, Any]]:
+        """Return all variable groups sorted by name."""
+        vg_dir = os.path.join(self._root, "variable_groups")
+        results: List[Dict[str, Any]] = []
+        if not os.path.isdir(vg_dir):
+            return results
+        for entry in os.scandir(vg_dir):
+            if entry.is_file() and entry.name.endswith(".json"):
+                data = self._read_json(entry.path)
+                if data:
+                    results.append(data)
+        return sorted(results, key=lambda g: (g.get("name") or "").lower())
+
+    def get_variable_group(self, group_id: str) -> Optional[Dict[str, Any]]:
+        path = os.path.join(self._root, "variable_groups", f"{group_id}.json")
+        return self._read_json(path)
+
+    def save_variable_group(self, group_id: str, data: Dict[str, Any]) -> None:
+        vg_dir = os.path.join(self._root, "variable_groups")
+        os.makedirs(vg_dir, exist_ok=True)
+        self._write_json(os.path.join(vg_dir, f"{group_id}.json"), data)
+
+    def delete_variable_group(self, group_id: str) -> None:
+        path = os.path.join(self._root, "variable_groups", f"{group_id}.json")
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
     def _find_run_dir(self, execution_id: str) -> Optional[str]:
         """Locate the run directory for a given execution UUID."""
         ws_root = os.path.join(self._root, "workspaces")
@@ -211,6 +257,7 @@ class LocalBackend:
             "terraform_version": execution.terraform_version,
             "duration_seconds": execution.duration_seconds,
             "sentinel_result": getattr(execution, "sentinel_result", None),
+            "run_params": getattr(execution, "run_params", []),
         }
 
     @staticmethod

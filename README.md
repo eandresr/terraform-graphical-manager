@@ -6,9 +6,12 @@
     <a href="#-features">Features</a> ·
     <a href="#-installation">Installation</a> ·
     <a href="#%EF%B8%8F-cli">CLI</a> ·
-    <a href="#-configuration">Configuration</a> ·
+    <a href="#%EF%B8%8F-configuration">Configuration</a> ·
     <a href="#-storage-backends">Storage Backends</a> ·
     <a href="#-terraform-version-management">Version Management</a> ·
+    <a href="#-variable-groups">Variable Groups</a> ·
+    <a href="#-workspace-variables">Workspace Variables</a> ·
+    <a href="#-portal-security">Portal Security</a> ·
     <a href="#-rest-api">REST API</a> ·
     <a href="#-testing--linting">Testing</a> ·
     <a href="#-security">Security</a>
@@ -37,6 +40,9 @@ No cloud account required. No authentication. No internet needed. Runs entirely 
 | **Git integration** | Branch, commit hash, author, message display · One-click `git pull` |
 | **Version management** | Multiple local Terraform binaries · dot (`1.14.8`) or underscore (`1_14_8`) folder names · Per-workspace version pin · Per-run override |
 | **Workspace discovery** | Recursive `.tf` scanner · Group folders rendered as collapsible tree · Sidebar search filter · Subdirectories of a workspace are never treated as separate workspaces |
+| **Variable Groups** | Named sets of Terraform/env variables applied to one or more workspaces · global or workspace-scoped · Sidebar panel with create/edit/delete + "Used in" workspace viewer |
+| **Workspace Variables** | Individual key-value variables scoped to a single workspace · Stored in `workspace_config.json` · Injected on every run |
+| **Portal Security** | Optional password lock · Fernet-based encryption of sensitive variable values · Auto re-encryption when password changes · Safe "remove lock" modal with option to decrypt values to plaintext |
 | **Settings UI** | Visual panel to edit all `tfg.conf` settings · Backend checklist · Site name customization |
 | **Storage backends** | Local filesystem · AWS S3 · GCP Cloud Storage · Azure Blob Storage |
 | **Credential isolation** | Each execution runs with its own isolated environment — no credential leakage |
@@ -395,7 +401,113 @@ The sidebar renders group folders as collapsible nodes and workspace leaves as l
 
 ---
 
-## �️ Sentinel Policy Integration
+## 📦 Variable Groups
+
+Variable Groups are named, reusable sets of Terraform and environment variables that can be applied to one or more workspaces.
+
+### Accessing Variable Groups
+
+The **"Variable Groups"** button in the sidebar (above Dashboard and Settings) opens a full-screen side panel listing all groups. From there you can:
+
+- **Create** a new group (name, description, scope, variables)
+- **Edit** an existing group — rename, change scope, add/remove/modify variables
+- **Delete** a group
+- **View which workspaces use it** — the "Used in" button (visible when a group is expanded) shows a modal with every workspace the group is assigned to, with a direct link to open each workspace
+
+### Variable types
+
+| Type | Behaviour |
+|---|---|
+| `TF_VAR_*` | Injected as `TF_VAR_<key>=<value>` — available to Terraform as input variables |
+| `env` | Injected as `<key>=<value>` — available as environment variables to any process |
+
+### Group scope
+
+| Scope | Behaviour |
+|---|---|
+| **Global** (`workspace_ids = ["*"]`) | Applied to every workspace automatically |
+| **Workspace-specific** | Applied only to the workspaces explicitly assigned |
+
+Workspace-scoped groups **override** global groups when the same key is defined in both.
+
+### Assigning groups to a workspace
+
+Inside a workspace, go to the **Variables** tab → **Variable Groups** sub-tab. There you can:
+
+- **Assign an existing group** to this workspace
+- **Create a new group** scoped to this workspace
+- **Edit or unassign** groups directly from the workspace view
+
+### Sensitive variables in groups
+
+A portal password must be configured (Settings → Portal Security) before marking any variable as sensitive. Sensitive values are encrypted at rest using Fernet symmetric encryption derived from the portal password.
+
+> **Warning shown at creation time:** if the portal password is later removed, sensitive variables will no longer be available for runs unless they are converted to plaintext first.
+
+---
+
+## 🔑 Workspace Variables
+
+In addition to Variable Groups, each workspace can have its own set of **individual variables** stored independently in `workspace_config.json`.
+
+These are managed from the **Variables** tab → **Variables** sub-tab in the workspace detail view.
+
+### Features
+
+- Inline table editor — add, edit, and delete variables without leaving the tab
+- Same two types: `TF_VAR_*` (Terraform input) and `env` (environment)
+- **Sensitive flag** — encrypts the value at rest using the portal password; when editing an existing sensitive variable, leaving the value field blank preserves the stored encrypted value without overwriting it
+- **Save variables** button persists changes immediately
+
+### Storage
+
+Workspace variables are stored inside `workspace_config.json` in the workspace's storage directory. They are loaded and injected on every execution of that workspace, in addition to any variables coming from assigned Variable Groups.
+
+### REST API
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/workspace/{id}/vars` | Get all variables for the workspace (sensitive values masked) |
+| `PUT` | `/api/workspace/{id}/vars` | Save variables (sensitive values are encrypted; omitting a value preserves the existing encrypted blob) |
+
+---
+
+## 🔐 Portal Security
+
+### Enabling the portal lock
+
+Set a password in **Settings → Portal Security**. Once set:
+
+- All pages require authentication before access
+- Sensitive variable values are encrypted using a key derived from the portal password
+- The session stores the encryption key for the lifetime of the browser session
+
+### Changing the password
+
+When you update the portal password, TGM automatically **re-encrypts all existing sensitive variables** across all groups and workspaces using the new key — no data is lost.
+
+### Removing the portal lock
+
+Clicking **Remove lock** opens a confirmation modal that:
+
+1. **Lists all sensitive variables** that will become unavailable — shown as `folder → workspace → group → variable`
+2. Offers an opt-in checkbox: **"Decrypt and store values as plain text"** — if checked, all sensitive variables are decrypted before the password is removed so they remain usable in future runs
+3. If the checkbox is left unchecked, sensitive variables are preserved as encrypted blobs in storage but will no longer be injectable (the decryption key is gone with the password)
+
+> **Recommendation:** if you intend to keep using your existing sensitive variables after removing the lock, enable "Decrypt and store values as plain text" before confirming.
+
+### Encryption details
+
+| Property | Detail |
+|---|---|
+| Algorithm | Fernet (AES-128-CBC + HMAC-SHA256) |
+| Key derivation | SHA-256 of the plaintext password → URL-safe base64 |
+| Storage | Encrypted blobs stored as strings inside the backend (`variable_groups/*.json` and `workspace_config.json`) |
+| Session | The plaintext password is stored in a signed Flask session cookie as `tgm_enc_key`; it is cleared on logout |
+
+---
+
+## 🛡️ Sentinel Policy Integration
 
 TGM integrates with the [HashiCorp Sentinel](https://developer.hashicorp.com/sentinel) policy-as-code framework.  
 Sentinel policies are evaluated against `terraform plan` output before an apply is allowed.
@@ -543,6 +655,26 @@ All UI features are powered by a JSON REST API. Base path: `/api/`
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/versions` | List available local versions + system version |
+
+### Workspace Variables
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/workspace/{id}/vars` | Get individual variables for a workspace (sensitive values masked) |
+| `PUT` | `/api/workspace/{id}/vars` | Save individual variables (sensitive values encrypted; blank value preserves existing blob) |
+
+### Variable Groups
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/variable-groups?workspace_id={id}` | List groups applied to a workspace |
+| `GET` | `/api/variable-groups/all` | List all groups (no filter) |
+| `POST` | `/api/variable-groups` | Create a new group |
+| `GET` | `/api/variable-groups/{group_id}` | Get a single group |
+| `PUT` | `/api/variable-groups/{group_id}` | Update a group |
+| `DELETE` | `/api/variable-groups/{group_id}` | Delete a group |
+| `GET` | `/api/sensitive-vars-summary` | List all sensitive variables across all groups (`{folder, workspace, group, variable}`) |
+| `POST` | `/api/variable-groups/unsensitize-all` | Decrypt all sensitive variables and store as plaintext (used when removing portal lock) |
 
 ### Settings
 

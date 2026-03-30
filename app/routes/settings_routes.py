@@ -154,7 +154,18 @@ def settings_save():
         new_password = data.get("lock_password", "").strip()
         if new_password:
             from app.auth import hash_password
+            from flask import session as _session
+            from app.variable_groups import reencrypt_all_sensitive
+            old_enc_key = _session.get("tgm_enc_key", "")
             updates["security.password_hash"] = hash_password(new_password)
+            # Re-encrypt all sensitive variables with the new password
+            if old_enc_key and old_enc_key != new_password:
+                try:
+                    reencrypt_all_sensitive(old_enc_key, new_password)
+                except Exception:
+                    pass
+            # Keep the enc_key in session in sync with the new password
+            _session["tgm_enc_key"] = new_password
 
     try:
         config.save(updates)
