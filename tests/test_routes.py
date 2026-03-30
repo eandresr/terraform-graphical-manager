@@ -86,7 +86,7 @@ class TestAPIRunSubmission:
         with patch.object(WorkspaceScanner, "get_workspace_by_id", return_value=dummy_ws):
             resp = client.post(
                 "/api/workspace/test_ws/run",
-                json={"command": "destroy"},
+                json={"command": "invalid_command"},
             )
         assert resp.status_code == 400
         data = json.loads(resp.data)
