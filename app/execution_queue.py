@@ -279,6 +279,12 @@ class ExecutionQueue:
             elif execution.command == "apply":
                 self._do_apply(runner, execution, workdir, log)
 
+            elif execution.command == "destroy":
+                log("=== terraform destroy ===")
+                ok = runner.destroy(log)
+                if not ok:
+                    raise RuntimeError("terraform destroy failed")
+
             # Sentinel check (after plan JSON is available)
             from flask import current_app
             try:

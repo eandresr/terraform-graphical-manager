@@ -116,7 +116,7 @@
     <!-- Tab nav -->
     <div class="mt-5 border-t border-gray-100 pt-4">
       <nav class="flex space-x-1">
-        {% for tab_id, tab_label in [('overview','Overview'),('vars','Variables'),('output','Output'),('runs','Runs'),('state','State'),('plan','Plan Diff'),('graph','Graph'),('sentinel','Sentinel')] %}
+        {% for tab_id, tab_label in [('overview','Overview'),('vars','Variables'),('output','Output'),('runs','Runs'),('state','State'),('plan','Plan Diff'),('graph','Graph'),('sentinel','Sentinel'),('destroy','Destroy')] %}
           <button @click="switchTab('{{ tab_id }}')"
                   :class="activeTab === '{{ tab_id }}' ? 'tab-active' : 'tab-inactive'"
                   class="tab">
@@ -1987,6 +1987,69 @@
        ================================================================ -->
   {% include "execution_modal.html" %}
 
+  <!-- ================================================================
+       TAB: DESTROY
+       ================================================================ -->
+  <div x-show="activeTab === 'destroy'" x-transition>
+    <div class="max-w-xl mx-auto py-8">
+      <!-- Warning card -->
+      <div class="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
+        <div class="flex items-start space-x-3">
+          <svg class="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+               stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+          <div>
+            <h3 class="font-semibold text-red-800 text-base">Destructive operation</h3>
+            <p class="text-red-700 text-sm mt-1">
+              <code class="font-mono bg-red-100 px-1 rounded">terraform destroy</code>
+              will <strong>permanently delete all resources</strong> managed by this workspace.
+              This action cannot be undone.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Confirmation card -->
+      <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+        <h3 class="font-semibold text-gray-900 mb-4">Confirm destroy</h3>
+
+        <p class="text-sm text-gray-600 mb-4">
+          Type <strong class="font-mono text-gray-900">destroy</strong> to confirm:
+        </p>
+        <input type="text"
+               x-model="destroyConfirmText"
+               placeholder="destroy"
+               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono
+                      focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent mb-5">
+
+        <button @click="submitDestroy()"
+                :disabled="destroyConfirmText !== 'destroy' || destroySubmitting"
+                class="w-full flex items-center justify-center px-4 py-2.5 rounded-lg font-medium text-sm
+                       bg-red-600 hover:bg-red-700 text-white transition-colors
+                       disabled:opacity-40 disabled:cursor-not-allowed">
+          <svg x-show="destroySubmitting" class="w-4 h-4 mr-2 animate-spin" fill="none"
+               stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9
+                     m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <svg x-show="!destroySubmitting" class="w-4 h-4 mr-2" fill="none"
+               stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6
+                     m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+          </svg>
+          <span x-text="destroySubmitting ? 'Queuing destroy…' : 'Run terraform destroy'"></span>
+        </button>
+
+        <p x-show="destroyError" x-text="destroyError"
+           class="mt-3 text-sm text-red-600 text-center"></p>
+      </div>
+    </div>
+  </div><!-- /tab destroy -->
+
 </div><!-- /x-data workspacePage -->
 
 {% endblock %}
@@ -2335,6 +2398,10 @@ function workspacePage(workspaceId) {
     sentinelGlobalSets: [],
     sentinelGlobalSetsLoaded: false,
     sentinelSaving: false,
+    // Destroy
+    destroyConfirmText: '',
+    destroySubmitting: false,
+    destroyError: null,
 
     async init() {
       this.setupSocket();
@@ -2718,6 +2785,32 @@ function workspacePage(workspaceId) {
       this.modalCommand = 'plan';
       this.modalVersion = this.pinnedVersion;
       this.modalOpen = true;
+    },
+
+    async submitDestroy() {
+      if (this.destroyConfirmText !== 'destroy') return;
+      this.destroySubmitting = true;
+      this.destroyError = null;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: 'destroy' }),
+        });
+        const data = await res.json();
+        if (data.execution_id) {
+          this.destroyConfirmText = '';
+          this.activeTab = 'runs';
+          this.selectRun(data.execution_id);
+          this.loadRuns();
+        } else {
+          this.destroyError = data.error || 'Failed to queue destroy.';
+        }
+      } catch (e) {
+        this.destroyError = e.message;
+      } finally {
+        this.destroySubmitting = false;
+      }
     },
 
     openApplyModal() {

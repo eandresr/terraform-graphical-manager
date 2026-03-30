@@ -59,8 +59,8 @@ def submit_run(workspace_id: str):
 
     body: Dict[str, Any] = request.get_json(silent=True) or {}
     command = body.get("command", "plan")
-    if command not in ("plan", "apply"):
-        return jsonify({"error": "command must be 'plan' or 'apply'"}), 400
+    if command not in ("plan", "apply", "destroy"):
+        return jsonify({"error": "command must be 'plan', 'apply' or 'destroy'"}), 400
 
     user_env: Dict[str, str] = body.get("env_vars") or {}
     plan_execution_id: str = body.get("plan_execution_id")
@@ -123,9 +123,43 @@ def submit_run(workspace_id: str):
     # Inject variable-group vars (TF_VAR_* and plain env)
     from flask import session as _session
     from app.variable_groups import get_vars_for_workspace
+    from app.crypto import decrypt as _decrypt
     _enc_key = _session.get("tgm_enc_key", "")
     _group_env, _sensitive_values, _var_entries = get_vars_for_workspace(workspace_id, _enc_key)
     isolated_env.update(_group_env)
+
+    # Inject workspace-level individual variables (stored via Variables sub-tab)
+    try:
+        _ws_cfg = get_backend().get_workspace_config(workspace_id)
+        for _var in _ws_cfg.get("variables", []):
+            _key = (_var.get("key") or "").strip()
+            if not _key:
+                continue
+            _raw = _var.get("value") or ""
+            _is_sensitive = _var.get("sensitive", False)
+            if _is_sensitive:
+                if not _enc_key or not _raw:
+                    continue
+                try:
+                    _val = _decrypt(_raw, _enc_key)
+                    _sensitive_values.append(_val)
+                    _display = "***"
+                except ValueError:
+                    continue
+            else:
+                _val = _raw
+                _display = _raw
+            _var_type = _var.get("type", "terraform")
+            _env_key = f"TF_VAR_{_key}" if _var_type == "terraform" else _key
+            isolated_env[_env_key] = _val
+            _var_entries.append({
+                "env_key": _env_key,
+                "display_value": _display,
+                "source": "workspace",
+                "sensitive": _is_sensitive,
+            })
+    except Exception:
+        pass
 
     execution = Execution(
         workspace_id=workspace_id,
