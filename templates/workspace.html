@@ -243,7 +243,204 @@
           <span x-text="stateLoading ? 'Loading…' : 'View State'"></span>
         </button>
       </div>
+    </div><!-- /State card -->
+
+    {% if workspace.has_git %}
+    <!-- Git ref selector card -->
+    <div class="mt-5 bg-white rounded-xl border border-gray-200 p-5">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-lg bg-green-50 flex items-center justify-center">
+            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M9 20.247V15m0 0a3 3 0 106 0 3 3 0 00-6 0zM9
+                       5.247v4.308m0 0a3 3 0 106 0 3 3 0 00-6 0zM3.75 12h16.5"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-900 text-sm">Git Repository</h3>
+            <p class="text-xs text-gray-400">
+              Current:
+              <span class="font-mono text-green-700 font-medium"
+                    x-text="(gitRefs.current && gitRefs.current.name)
+                             ? gitRefs.current.type + ':' + gitRefs.current.name
+                             : '{{ workspace.git.branch or '' }}'"></span>
+            </p>
+          </div>
+        </div>
+        <!-- Pull on run toggle + Fetch button -->
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+            <input type="checkbox" x-model="modalGitPull" class="w-4 h-4 accent-green-600">
+            Pull on next run
+          </label>
+          <button @click="gitFetch()"
+                  :disabled="gitFetching || gitCheckingOut"
+                  :class="(gitFetching || gitCheckingOut) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'"
+                  class="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200
+                         rounded-lg px-2.5 py-1.5 transition-colors select-none"
+                  title="git fetch --all --prune">
+            <svg x-show="!gitFetching" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9
+                       m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <svg x-show="gitFetching" class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9
+                       m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <span x-text="gitFetching ? 'Fetching…' : 'Fetch'"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Ref search + dropdown -->
+      <!-- @click.outside wraps BOTH the input and the dropdown so that
+           clicking the input doesn't count as "outside" the dropdown -->
+      <div class="relative" @click.outside="gitOpen = false">
+        <div class="flex items-center border border-gray-200 rounded-lg overflow-hidden"
+             :class="gitOpen ? 'border-green-300 ring-1 ring-green-200' : ''">
+          <div class="pl-3 text-gray-400 flex-shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>
+            </svg>
+          </div>
+          <input type="text"
+                 x-model="gitRefSearch"
+                 placeholder="Search branch or tag…"
+                 @focus="gitOpen = true"
+                 @keydown.escape="gitOpen = false; $el.blur()"
+                 class="flex-1 px-2 py-2 text-sm font-mono text-gray-700 focus:outline-none bg-white">
+          <button x-show="gitRefSearch" @click.stop="gitRefSearch = ''"
+                  class="px-2 text-gray-400 hover:text-gray-600">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <!-- Dropdown list — uses x-show (not x-if) so Alpine doesn't destroy/recreate
+             the subtree on each keystroke, fixing reactivity of inner x-for lists -->
+        <div x-show="gitOpen"
+             x-transition:enter="transition ease-out duration-100"
+             x-transition:enter-start="opacity-0 -translate-y-1"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             class="absolute z-40 mt-1 w-full bg-white border border-gray-200 rounded-xl
+                    shadow-lg max-h-64 overflow-y-auto">
+          <!-- Branches group -->
+          <div x-show="gitRefs.branches && gitRefs.branches.filter(
+                 b => !gitRefSearch || b.name.toLowerCase().includes(gitRefSearch.toLowerCase())
+               ).length > 0">
+            <div class="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase
+                        tracking-wide bg-gray-50 sticky top-0">Branches</div>
+            <template x-for="branch in gitRefs.branches.filter(
+                        b => !gitRefSearch || b.name.toLowerCase().includes(gitRefSearch.toLowerCase())
+                      )" :key="branch.name">
+              <button @click.stop="checkoutRef(branch.name, !branch.local); gitOpen = false; gitRefSearch = ''"
+                      :disabled="gitCheckingOut || gitFetching"
+                      :class="[
+                        gitRefs.current && gitRefs.current.name === branch.name
+                          ? 'bg-green-50 text-green-700 font-semibold'
+                          : 'text-gray-700 hover:bg-gray-50',
+                        (gitCheckingOut || gitFetching) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                      ]"
+                      class="w-full text-left px-4 py-2 text-sm font-mono
+                             flex items-center justify-between">
+                <span class="flex items-center gap-2 min-w-0">
+                  <span x-text="branch.name" class="truncate"></span>
+                  <!-- remote-only badge: branch exists on remote but not checked out locally -->
+                  <span x-show="!branch.local && branch.remote"
+                        class="flex-shrink-0 text-xs font-sans font-medium px-1.5 py-0.5
+                               rounded bg-amber-50 text-amber-700 border border-amber-200
+                               leading-none">
+                    ↓ remote
+                  </span>
+                  <!-- both local + remote: subtle sync indicator -->
+                  <span x-show="branch.local && branch.remote"
+                        class="flex-shrink-0 text-xs font-sans font-normal
+                               text-gray-400 leading-none">
+                    ↕
+                  </span>
+                </span>
+                <!-- active-branch checkmark OR checkout-in-progress spinner -->
+                <template x-if="gitCheckingOut && gitRefs.current && gitRefs.current.name !== branch.name">
+                  <svg class="w-3.5 h-3.5 text-gray-300 animate-spin flex-shrink-0 ml-2"
+                       fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9
+                             m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                  </svg>
+                </template>
+                <svg x-show="gitRefs.current && gitRefs.current.name === branch.name && !gitCheckingOut"
+                     class="w-3.5 h-3.5 text-green-600 flex-shrink-0 ml-2"
+                     fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                </svg>
+              </button>
+            </template>
+          </div>
+          <!-- Tags / Releases group -->
+          <div x-show="gitRefs.tags && gitRefs.tags.filter(
+                 t => !gitRefSearch || t.toLowerCase().includes(gitRefSearch.toLowerCase())
+               ).length > 0">
+            <div class="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase
+                        tracking-wide bg-gray-50 sticky top-0">Tags / Releases</div>
+            <template x-for="tag in gitRefs.tags.filter(
+                        t => !gitRefSearch || t.toLowerCase().includes(gitRefSearch.toLowerCase())
+                      )" :key="tag">
+              <button @click.stop="checkoutRef(tag, false); gitOpen = false; gitRefSearch = ''"
+                      :disabled="gitCheckingOut || gitFetching"
+                      :class="[
+                        gitRefs.current && gitRefs.current.name === tag
+                          ? 'bg-green-50 text-green-700 font-semibold'
+                          : 'text-gray-700 hover:bg-gray-50',
+                        (gitCheckingOut || gitFetching) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                      ]"
+                      class="w-full text-left px-4 py-2 text-sm font-mono flex items-center justify-between">
+                <span>
+                  <span class="text-xs text-gray-400 mr-1">tag</span>
+                  <span x-text="tag"></span>
+                </span>
+                <svg x-show="gitRefs.current && gitRefs.current.name === tag"
+                     class="w-3.5 h-3.5 text-green-600 flex-shrink-0"
+                     fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                </svg>
+              </button>
+            </template>
+          </div>
+          <!-- Search produced no matches -->
+          <div x-show="gitRefSearch &&
+                       gitRefs.branches.filter(b => b.name.toLowerCase().includes(gitRefSearch.toLowerCase())).length === 0 &&
+                       gitRefs.tags.filter(t => t.toLowerCase().includes(gitRefSearch.toLowerCase())).length === 0"
+               class="px-4 py-4 text-center text-sm text-gray-400">
+            No matches for "<span class="font-mono text-gray-600" x-text="gitRefSearch"></span>"
+          </div>
+          <!-- No data at all (empty repo) -->
+          <div x-show="!gitRefSearch &&
+                       (!gitRefs.branches || gitRefs.branches.length === 0) &&
+                       (!gitRefs.tags || gitRefs.tags.length === 0)"
+               class="px-4 py-6 text-center text-sm text-gray-400">No refs found</div>
+        </div>
+      </div>
+
+      <div class="mt-2 flex items-center justify-between">
+        <p class="text-xs text-gray-400">
+          Select a branch, tag or release to switch the workspace code.
+          <span class="text-amber-600 font-medium">Uncommitted changes are preserved.</span>
+        </p>
+        <div x-show="gitCheckingOut" class="flex items-center gap-2 text-xs text-tf-600">
+          <svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9
+                     m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Checking out…
+        </div>
+      </div>
     </div>
+    {% endif %}
 
   </div>
 
@@ -1190,6 +1387,11 @@
                   <span class="inline-flex items-center gap-1 text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100"
                         x-text="`tf ${run.terraform_version}`"></span>
                 </template>
+                <template x-if="run.git_ref">
+                  <span class="inline-flex items-center gap-1 text-xs font-mono font-medium px-2 py-0.5 rounded-full"
+                        :class="run.git_ref.includes('(local)') ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-green-50 text-green-700 border border-green-100'"
+                        x-text="run.git_ref"></span>
+                </template>
                 <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
                 </svg>
@@ -1945,6 +2147,22 @@
           <h2 class="text-lg font-semibold text-gray-900">Apply Preview</h2>
         </div>
 
+        {% if workspace.has_git %}
+        <!-- Git pull toggle -->
+        <label class="hidden sm:flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none"
+               :class="applyPreviewStep !== 'idle' ? 'opacity-50 pointer-events-none' : ''">
+          <input type="checkbox" x-model="applyPreviewGitPull"
+                 :disabled="applyPreviewStep !== 'idle'"
+                 class="w-3.5 h-3.5 accent-green-600">
+          <svg class="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9
+                     m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          git pull before plan
+        </label>
+        {% endif %}
+
         <!-- Step indicator -->
         <div class="hidden sm:flex items-center space-x-1 text-xs font-medium">
           <span class="flex items-center space-x-1.5"
@@ -1995,6 +2213,54 @@
 
       <!-- Scrollable content -->
       <div class="flex-1 overflow-y-auto divide-y divide-gray-100">
+
+        {% if workspace.has_git %}
+        <!-- Idle: git options shown before plan starts -->
+        <div x-show="applyPreviewStep === 'idle'" class="p-5">
+          <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+            <div class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="none"
+                   stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M9 20.247V15m0 0a3 3 0 106 0 3 3 0 00-6 0zM9
+                         5.247v4.308m0 0a3 3 0 106 0 3 3 0 00-6 0zM3.75 12h16.5"/>
+              </svg>
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-green-800">Git repository detected</p>
+                <p class="text-xs text-green-700 mt-0.5">
+                  Current ref:
+                  <span class="font-mono font-medium"
+                        x-text="(gitRefs.current && gitRefs.current.name)
+                                 ? gitRefs.current.type + ':' + gitRefs.current.name
+                                 : '{{ workspace.git.branch or '' }}'"></span>
+                </p>
+                <div class="mt-3 space-y-2">
+                  <label class="flex items-center gap-2.5 cursor-pointer">
+                    <input type="checkbox" x-model="applyPreviewGitPull"
+                           class="w-4 h-4 accent-green-600">
+                    <span class="text-sm text-green-800">
+                      Run <code class="bg-green-100 px-1 rounded">git pull</code>
+                      before planning
+                      <span class="text-xs text-green-600 font-normal ml-1">(fetches latest code)</span>
+                    </span>
+                  </label>
+                  <p x-show="!applyPreviewGitPull" class="text-xs text-amber-700 ml-6">
+                    The run will be labeled as <strong>forced local</strong> — code on disk as-is.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 flex justify-end">
+            <button @click="startApplyPlan()" class="btn-primary text-sm">
+              <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+              </svg>
+              Start Planning
+            </button>
+          </div>
+        </div>
+        {% endif %}
 
         <!-- §1  Plan log -->
         <div x-show="applyPreviewStep === 'planning' || (applyPlanLogs.length > 0)" class="p-5">
@@ -2975,6 +3241,14 @@ function workspacePage(workspaceId) {
     runLogs: [],
     runParams: [],
     gitPulling: false,
+    // Git integration (dynamic refs selector)
+    gitRefs: { branches: [], tags: [], current: { type: 'branch', name: '{{ workspace.git.branch or "" }}' } },
+    gitRefSearch: '',
+    gitOpen: false,
+    gitCheckingOut: false,
+    gitFetching: false,
+    modalGitPull: {{ 'true' if workspace.has_git else 'false' }},
+    applyPreviewGitPull: {{ 'true' if workspace.has_git else 'false' }},
     // Runs pagination
     runsPage: 1,
     runsPageSize: 10,
@@ -3037,6 +3311,7 @@ function workspacePage(workspaceId) {
       this.loadVersions();
       if (this.activeTab === 'runs') this.loadRuns();
       if (this.activeTab === 'sentinel') this.loadSentinelConfig();
+      {% if workspace.has_git %}if (this.activeTab === 'overview' || !this.activeTab) this.loadGitRefs();{% endif %}
     },
 
     // ── Runs pagination getters ────────────────────────────────────────
@@ -3092,6 +3367,7 @@ function workspacePage(workspaceId) {
       if (tab === 'runs' && !this.runsLoaded) this.loadRuns();
       if (tab === 'sentinel') this.loadSentinelConfig();
       if (tab === 'vars') window.dispatchEvent(new CustomEvent('tgm-load-vars'));
+      {% if workspace.has_git %}if (tab === 'overview') this.loadGitRefs();{% endif %}
     },
 
     setupSocket() {
@@ -3189,6 +3465,53 @@ function workspacePage(workspaceId) {
         }
       } finally {
         this.gitPulling = false;
+      }
+    },
+
+    async loadGitRefs() {
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/git/refs`);
+        if (res.ok) {
+          const data = await res.json();
+          this.gitRefs = data;
+        }
+      } catch (_) {}
+    },
+
+    async gitFetch() {
+      this.gitFetching = true;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/git/fetch`, { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          // Reload the refs list to show updated remote branches
+          await this.loadGitRefs();
+        } else {
+          alert('git fetch failed:\n' + (data.output || data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('git fetch error: ' + e);
+      } finally {
+        this.gitFetching = false;
+      }
+    },
+
+    async checkoutRef(ref, isRemoteOnly = false) {
+      this.gitCheckingOut = true;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/git/checkout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref, remote_only: isRemoteOnly }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          window.location.reload();
+        } else {
+          alert('git checkout failed:\n' + (data.output || data.error));
+        }
+      } finally {
+        this.gitCheckingOut = false;
       }
     },
 
@@ -3326,7 +3649,12 @@ function workspacePage(workspaceId) {
       this.applySentinelResult = null;
       this.applyConfirmedPreview = false;
       this.modalEnvVars = {};
+      this.applyPreviewGitPull = this.modalGitPull;
+      {% if workspace.has_git %}
+      // For git repos: stay at idle so user can configure git pull option.
+      {% else %}
       this.startApplyPlan();
+      {% endif %}
     },
 
     async startApplyPlan() {
@@ -3336,6 +3664,7 @@ function workspacePage(workspaceId) {
           command: 'plan',
           env_vars: this.modalEnvVars,
           terraform_version_override: this.pinnedVersion,
+          git_pull: this.applyPreviewGitPull,
         };
         const res = await fetch(`/api/workspace/${workspaceId}/run`, {
           method: 'POST',
@@ -3513,6 +3842,7 @@ function workspacePage(workspaceId) {
           command: this.modalCommand,
           env_vars: this.modalEnvVars,
           terraform_version_override: this.modalVersion,
+          git_pull: this.modalGitPull,
         };
         if (this.modalCommand === 'apply' && this.latestPlanExecId) {
           body.plan_execution_id = this.latestPlanExecId;

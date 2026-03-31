@@ -1,7 +1,6 @@
 """
 API Routes — JSON REST endpoints consumed by the frontend JS layer.
 """
-import subprocess
 from typing import Any, Dict
 
 from flask import Blueprint, current_app, jsonify, request
@@ -172,6 +171,9 @@ def submit_run(workspace_id: str):
     )
     execution.terraform_binary = tf_binary
     execution.sensitive_values = _sensitive_values
+    execution.git_pull = bool(body.get("git_pull", False))
+    execution.enc_key = _enc_key
+    execution.repos_root = config.repos_root
     execution.run_params = _collect_run_params(
         workspace_path=workspace["abs_path"],
         var_entries=_var_entries,
@@ -420,20 +422,59 @@ def git_pull(workspace_id: str):
     workspace = _get_workspace_or_404(workspace_id)
     if workspace is None:
         return jsonify({"error": "Workspace not found"}), 404
-    try:
-        result = subprocess.run(
-            ["git", "pull"],
-            cwd=workspace["abs_path"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        return jsonify({
-            "ok": result.returncode == 0,
-            "output": result.stdout + result.stderr,
-        })
-    except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
+    from flask import session as _fls
+    from app.git_manager import pull as gm_pull, get_token_for_workspace
+    enc_key = _fls.get("tgm_enc_key", "")
+    token = get_token_for_workspace(workspace_id, enc_key)
+    result = gm_pull(workspace["abs_path"], token)
+    return jsonify({"ok": result["ok"], "output": result["output"]})
+
+
+# -------------------------------------------------------------------------
+# Git refs listing & checkout
+# -------------------------------------------------------------------------
+
+@api_bp.route("/workspace/<workspace_id>/git/refs")
+def workspace_git_refs(workspace_id: str):
+    workspace = _get_workspace_or_404(workspace_id)
+    if workspace is None:
+        return jsonify({"error": "Workspace not found"}), 404
+    if not workspace.get("has_git"):
+        return jsonify({"branches": [], "tags": [], "current": {}})
+    from app.git_manager import list_refs
+    return jsonify(list_refs(workspace["abs_path"]))
+
+
+@api_bp.route("/workspace/<workspace_id>/git/checkout", methods=["POST"])
+def workspace_git_checkout(workspace_id: str):
+    workspace = _get_workspace_or_404(workspace_id)
+    if workspace is None:
+        return jsonify({"error": "Workspace not found"}), 404
+    if not workspace.get("has_git"):
+        return jsonify({"ok": False, "output": "Not a git repository"}), 400
+    body = request.get_json(silent=True) or {}
+    ref = (body.get("ref") or "").strip()
+    remote_only = bool(body.get("remote_only", False))
+    if not ref:
+        return jsonify({"ok": False, "output": "ref is required"}), 400
+    from app.git_manager import checkout_ref
+    result = checkout_ref(workspace["abs_path"], ref, remote_only=remote_only)
+    return jsonify(result)
+
+
+@api_bp.route("/workspace/<workspace_id>/git/fetch", methods=["POST"])
+def workspace_git_fetch(workspace_id: str):
+    workspace = _get_workspace_or_404(workspace_id)
+    if workspace is None:
+        return jsonify({"error": "Workspace not found"}), 404
+    if not workspace.get("has_git"):
+        return jsonify({"ok": False, "output": "Not a git repository"}), 400
+    from flask import session as _fls
+    from app.git_manager import fetch_all, get_token_for_workspace
+    enc_key = _fls.get("tgm_enc_key", "")
+    token = get_token_for_workspace(workspace_id, enc_key)
+    result = fetch_all(workspace["abs_path"], token)
+    return jsonify(result)
 
 
 # -------------------------------------------------------------------------
