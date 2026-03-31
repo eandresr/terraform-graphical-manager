@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "terraform-graphical-manager"
-version = "0.1.0"
+version = "0.3.0"
 description = "A local, open-source Terraform Cloud-like UI for your own machines."
 readme = "README.md"
 license = { file = "LICENSE" }

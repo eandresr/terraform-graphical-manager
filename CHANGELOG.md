@@ -7,7 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased] — 0.2.0
+## [Unreleased] — 0.3.0
+
+> Branch: `feature/git-integration`
+
+### Added
+
+#### Git Integration
+- New `app/git_manager.py` module: centralised git operations with PAT token resolution.
+- **Branch / tag / release selector** in the workspace Overview tab: searchable dropdown
+  lists all local and remote refs in the cloned repository.
+  - Branches that exist only on the remote are shown with a **↓ remote** amber badge.
+  - Branches that exist both locally and on the remote show a **↕** sync indicator.
+  - Selecting any entry performs `git checkout` on disk (from the git root) so the
+    workspace files and `.tf` variables reflect the chosen ref immediately.
+  - For remote-only branches `git fetch origin` is run automatically before checkout so
+    git's DWIM creates a local tracking branch.
+- **Fetch button** in the git card header: runs `git fetch --all --prune` to refresh
+  all remote refs without switching branches. The ref list updates in place after fetch.
+- **Pull on next run** checkbox: when enabled, `git pull` is executed just before the
+  Terraform runner starts, ensuring the workspace uses the latest remote code.
+- **Run labels**: every execution records its git ref at submission time.
+  - Green badge — code was pulled from remote: `git-branch:main`
+  - Amber badge — local code was used (pull skipped): `git-branch:main (local)`
+- **Apply Preview** idle state for git workspaces: a dedicated start screen lets the user
+  configure the git pull option before kicking off the plan stage.
+- **PAT token resolution** (priority order):
+  1. `GITHUB_TOKEN` / `GIT_TOKEN` environment variable.
+  2. Workspace-level `env`-type variable named `GITHUB_TOKEN` or `GIT_TOKEN`.
+  3. Variable groups visible to the workspace.
+- Token injected via `GIT_CONFIG_KEY_0` / `GIT_CONFIG_VALUE_0` — never written to
+  `.git/config`.
+- New REST API endpoints:
+  - `GET  /api/workspace/<id>/git/refs` — list branches (with local/remote flags), tags and current HEAD.
+  - `POST /api/workspace/<id>/git/checkout` — checkout a ref on disk; accepts `remote_only` flag.
+  - `POST /api/workspace/<id>/git/fetch` — run `git fetch --all --prune`.
+
+### Fixed
+- **Git boundary detection**: `_has_git_repo` and `is_git_repo` now stop walking parent
+  directories at `repos_root`, preventing workspaces inside the application source tree
+  from inheriting the application's own git repository.
+- **Git operations now run from the git root** (`git rev-parse --show-toplevel`), ensuring
+  `git checkout` and `git pull` affect the full working tree rather than a subdirectory.
+- **Dropdown closes when typing**: `@click.outside` was placed on the results list instead
+  of the wrapper element, causing focus on the search input to be treated as an outside
+  click. Moved to the outer `<div>`.
+- **Search filter not reactive**: branch/tag groups used `x-if` (destroys DOM when false),
+  which prevented Alpine from re-evaluating the inner `x-for` on each keystroke. Changed
+  to `x-show` so reactivity is maintained throughout typing.
+
+---
+
+## [0.2.0] — 2026-03-31
 
 > Branch: `feature/workspace-vars`
 
@@ -102,5 +153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/eandresr/terraform-graphical-manager/compare/main...feature/workspace-vars
+[Unreleased]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/eandresr/terraform-graphical-manager/releases/tag/v0.1.0
