@@ -54,6 +54,12 @@ class Execution:
         # Structured variable parameters recorded at run submission time.
         self.run_params: List[Dict[str, Any]] = []
 
+        # Git integration
+        self.git_pull: bool = False
+        self.git_ref: Optional[str] = None   # e.g. "git-branch:main"
+        self.enc_key: str = ""               # enc key for token lookups in worker threads
+        self.repos_root: str = ""            # boundary for git repo detection
+
         self.timestamp = datetime.datetime.utcnow().isoformat()
         self.status = ExecutionStatus.QUEUED
         self.logs: List[str] = []
@@ -101,6 +107,8 @@ class Execution:
             "log_lines": len(self.logs),
             "sentinel_result": self.sentinel_result,
             "run_params": self.run_params,
+            "git_ref": self.git_ref,
+            "git_pull": getattr(self, "git_pull", False),
         }
 
     @classmethod
@@ -127,6 +135,9 @@ class Execution:
         obj.run_params = meta.get("run_params") or []
         obj.sentinel_policies_override = None
         obj.sensitive_values = []
+        obj.git_pull = meta.get("git_pull", False)
+        obj.git_ref = meta.get("git_ref")
+        obj.enc_key = ""
         obj._workdir = None
         obj._canceled = threading.Event()
         obj._lock = threading.Lock()
@@ -259,6 +270,9 @@ class ExecutionQueue:
         try:
             ts = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             log(f"=== Run started: {ts}  |  command: {execution.command} ===")
+
+            # Git: optionally pull and record current ref label
+            self._handle_git(execution, log)
 
             runner = TerraformRunner(
                 execution.workspace_path, execution.env_vars, execution.terraform_binary
@@ -465,6 +479,38 @@ class ExecutionQueue:
     # ------------------------------------------------------------------
     # Cloud storage
     # ------------------------------------------------------------------
+
+    def _handle_git(self, execution: Execution, log) -> None:
+        """Optionally git pull and record the current ref label on the execution."""
+        try:
+            from app.git_manager import (
+                is_git_repo, list_refs,
+                pull as git_pull_fn,
+                get_token_for_workspace,
+            )
+            if not is_git_repo(execution.workspace_path, execution.repos_root):
+                return
+            refs = list_refs(execution.workspace_path)
+            cur = refs.get("current", {})
+            ref_name = cur.get("name", "")
+            ref_type = cur.get("type", "branch")
+            label = f"git-{ref_type}:{ref_name}"
+            if execution.git_pull:
+                log(f"=== git pull  [{label}] ===")
+                token = get_token_for_workspace(
+                    execution.workspace_id, execution.enc_key
+                )
+                result = git_pull_fn(execution.workspace_path, token)
+                if result.get("ok"):
+                    log("[git] Pull complete.")
+                else:
+                    log(f"[git] Pull failed: {result.get('output', '').strip()}")
+            else:
+                label += " (local)"
+                log(f"=== git: using local code  [{label}] ===")
+            execution.git_ref = label
+        except Exception as exc:
+            log(f"[git] Warning: could not process git state: {exc}")
 
     def _track_changes(self, execution: Execution, snap_before, snap_after) -> None:
         """Diff state snapshots and persist resource history."""

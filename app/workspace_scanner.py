@@ -103,7 +103,7 @@ class WorkspaceScanner:
         name = parts[-1]
         providers = detect_providers(abs_path)
         backend = detect_backend(abs_path)
-        has_git = self._has_git_repo(abs_path)
+        has_git = self._has_git_repo(abs_path, self.repos_root)
         git_info = self._get_git_info(abs_path) if has_git else {
             "branch": None, "commit_hash": None,
             "commit_author": None, "commit_message": None,
@@ -121,12 +121,22 @@ class WorkspaceScanner:
         }
 
     @staticmethod
-    def _has_git_repo(path: str) -> bool:
-        """Check if the workspace (or any parent) has a .git directory."""
+    def _has_git_repo(path: str, boundary: str = "") -> bool:
+        """Check if the workspace (or a parent up to *boundary*) has a .git directory.
+
+        The walk stops at *boundary* (typically repos_root) so we never
+        detect a git repo that belongs to a parent project (e.g. the app's
+        own repository when workspaces live inside the app directory).
+        """
         current = os.path.realpath(path)
+        boundary = os.path.realpath(boundary) if boundary else ""
         while True:
             if os.path.isdir(os.path.join(current, ".git")):
                 return True
+            # Stop if we have reached (or gone above) the boundary
+            if boundary and (current == boundary or
+                             not current.startswith(boundary + os.sep)):
+                return False
             parent = os.path.dirname(current)
             if parent == current:
                 return False

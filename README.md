@@ -37,7 +37,7 @@ No cloud account required. No authentication. No internet needed. Runs entirely 
 | **Drift detection** | `terraform plan -refresh-only` to detect configuration drift automatically |
 | **Dependency graph** | `terraform graph` rendered interactively with D3.js (zoom, pan, click) |
 | **Outputs** | `terraform output -json` displayed with sensitive values masked |
-| **Git integration** | Branch, commit hash, author, message display · One-click `git pull` |
+| **Git integration** | Branch / tag / release selector with search · Local & remote ref listing · One-click checkout (fetches remote branches automatically) · `git fetch` button · Optional `git pull` before each run · PAT token resolution (env var → workspace var → group var) · Run labels showing git ref and pull status |
 | **Version management** | Multiple local Terraform binaries · dot (`1.14.8`) or underscore (`1_14_8`) folder names · Per-workspace version pin · Per-run override |
 | **Workspace discovery** | Recursive `.tf` scanner · Group folders rendered as collapsible tree · Sidebar search filter · Subdirectories of a workspace are never treated as separate workspaces |
 | **Variable Groups** | Named sets of Terraform/env variables applied to one or more workspaces · global or workspace-scoped · Sidebar panel with create/edit/delete + "Used in" workspace viewer |
@@ -615,6 +615,9 @@ All UI features are powered by a JSON REST API. Base path: `/api/`
 | `GET` | `/api/workspace/{id}/lock` | State lock status |
 | `GET` | `/api/workspace/{id}/output` | `terraform output -json` (sensitive values masked) |
 | `POST` | `/api/workspace/{id}/git-pull` | Run `git pull` |
+| `GET` | `/api/workspace/{id}/git/refs` | List branches (local + remote flags), tags and current HEAD |
+| `POST` | `/api/workspace/{id}/git/checkout` | Checkout a branch or tag on disk (auto-fetches remote-only branches) |
+| `POST` | `/api/workspace/{id}/git/fetch` | Run `git fetch --all --prune` to refresh remote refs |
 | `GET` | `/api/workspace/{id}/version` | Get pinned/effective Terraform version |
 | `POST` | `/api/workspace/{id}/version` | Pin a Terraform version for the workspace |
 
@@ -1219,11 +1222,51 @@ Drift detection runs `terraform plan -refresh-only -json` and checks whether any
 
 ## Git Integration
 
-Each workspace directory is expected to be a Git repository. The application:
+TGM provides full git lifecycle management for workspace repositories directly from the UI.
 
-- Detects current branch, last commit hash, author, and message
-- Displays this information in the workspace overview
-- Provides a **Pull latest changes** button that runs `git pull`
+### Branch / Tag / Release selector
+
+The workspace **Overview** tab shows a **Git Repository** card when the workspace directory
+(or a parent within `repos_root`) is a git repository. The card includes:
+
+- **Current ref** — displays the active branch, tag, or detached commit.
+- **Searchable dropdown** — lists all local branches and all remote branches (`origin/*`).
+  - Branches that exist **only on the remote** are shown with a **↓ remote** amber badge.
+  - Branches that exist both locally and remotely show a **↕** indicator.
+  - Selecting any entry runs `git checkout <ref>` on disk from the repository root,
+    so `.tf` files, `terraform.tfvars`, and modules reflect the chosen branch instantly.
+  - For remote-only branches, `git fetch origin` is run automatically before checkout
+    to create the local tracking branch (git DWIM).
+- **Fetch button** — runs `git fetch --all --prune` without switching branches, then
+  refreshes the ref list in place. Useful after a colleague pushes a new branch.
+- **Pull on next run** checkbox — when enabled, `git pull` is executed just before the
+  Terraform runner starts, keeping the workspace in sync with the remote.
+
+### Run labels
+
+Every execution records the git ref at submission time:
+
+| Badge colour | Meaning |
+|---|---|
+| Green | Pull was performed — `git-branch:main` |
+| Amber | Local code used (pull skipped) — `git-branch:main (local)` |
+
+### PAT token resolution
+
+For private repositories, TGM resolves a Personal Access Token (PAT) in this order:
+
+1. `GITHUB_TOKEN` or `GIT_TOKEN` **environment variable** (system-level).
+2. Workspace-level **`env`-type variable** named `GITHUB_TOKEN` or `GIT_TOKEN`.
+3. **Variable Groups** visible to the workspace.
+
+The token is injected via `GIT_CONFIG_KEY_0` / `GIT_CONFIG_VALUE_0` and is never
+persisted to `.git/config`.
+
+### Boundary detection
+
+To prevent TGM from mistakenly reading the git repository of its own source code
+(when `repos_root` is inside the application directory), the git detection walk stops
+at `repos_root` and will not traverse above it.
 
 ---
 
