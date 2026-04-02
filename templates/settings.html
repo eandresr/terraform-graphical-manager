@@ -497,18 +497,18 @@
           <!-- Remove lock -->
           <div class="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
             <div>
-              <p class="text-sm font-medium text-red-800">Remove portal lock</p>
-              <p class="text-xs text-red-600 mt-0.5">The portal will become publicly accessible without a password.</p>
+              <p class="text-sm font-medium text-red-800">Remove portal security</p>
+              <p class="text-xs text-red-600 mt-0.5">The portal will become publicly accessible without a password (if port is open to outside).</p>
             </div>
             <button type="button" @click="openRemoveLock()"
                     class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors flex-shrink-0 ml-4">
-              Remove lock
+              Disable security
             </button>
             <input type="hidden" id="remove-lock-field" name="remove_lock_password" value="">
           </div>
 
           <!-- Remove lock confirmation modal -->
-          <div x-show="removeLockOpen" x-transition.opacity
+          <div x-show="removeLockOpen" x-cloak x-transition.opacity
                class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
                @keydown.escape.window="removeLockOpen = false">
             <div @click.stop
@@ -598,6 +598,130 @@
       </div>
     </section>
 
+    <!-- --------------------------------------------------------
+         Section: Run History Retention
+         -------------------------------------------------------- -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
+             x-data="{ retentionMode: '{{ config.history_retention_mode }}' }">
+      <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
+        <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586
+                   a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414
+                   A1 1 0 006.586 13H4"/>
+        </svg>
+        <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">Run History Retention</h2>
+        <span x-show="retentionMode !== 'none'"
+              class="ml-auto inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
+          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <circle cx="10" cy="10" r="5"/>
+          </svg>
+          <span>Auto-cleanup on</span>
+        </span>
+      </div>
+
+      <div class="px-6 py-5 space-y-5">
+        <p class="text-xs text-gray-500">
+          Controls how long execution logs, plan files, and metadata are kept per workspace.
+          Files are always stored in the active
+          <code class="font-mono text-gray-700">TERRAFORM_GRAPHICAL_BACKEND</code>
+          (configured via environment variables — see the backend panel below).
+          Cleanup runs automatically when a new execution finishes for that workspace.
+        </p>
+
+        <!-- Retention mode selector -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Retention policy</label>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="opt in [
+              {v:'none',    l:'Keep all'},
+              {v:'count',   l:'By run count'},
+              {v:'days',    l:'By age'},
+              {v:'size',    l:'By size'}
+            ]" :key="opt.v">
+              <label class="cursor-pointer">
+                <input type="radio" name="history_retention_mode" :value="opt.v"
+                       x-model="retentionMode" class="sr-only">
+                <span class="px-4 py-2 text-sm rounded-lg border transition-colors select-none"
+                      :class="retentionMode === opt.v
+                        ? 'bg-tf-600 text-white border-tf-600 font-medium'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'">
+                  <span x-text="opt.l"></span>
+                </span>
+              </label>
+            </template>
+          </div>
+        </div>
+
+        <!-- By run count -->
+        <div x-show="retentionMode === 'count'" x-transition
+             class="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+          <p class="text-xs font-semibold text-gray-700 uppercase tracking-wide">By run count</p>
+          <div class="flex items-center gap-3">
+            <label class="text-sm text-gray-700 whitespace-nowrap" for="history_retention_count">
+              Keep the last
+            </label>
+            <input id="history_retention_count" name="history_retention_count" type="number"
+                   min="1" max="9999"
+                   value="{{ config.history_retention_count }}"
+                   class="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono
+                          focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent">
+            <label class="text-sm text-gray-700 whitespace-nowrap" for="history_retention_count">
+              runs per workspace
+            </label>
+          </div>
+          <p class="text-xs text-gray-500">
+            Older runs (logs, plan files, metadata) are deleted to stay within this limit.
+          </p>
+        </div>
+
+        <!-- By age -->
+        <div x-show="retentionMode === 'days'" x-transition
+             class="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+          <p class="text-xs font-semibold text-gray-700 uppercase tracking-wide">By age</p>
+          <div class="flex items-center gap-3">
+            <label class="text-sm text-gray-700 whitespace-nowrap" for="history_retention_days">
+              Delete runs older than
+            </label>
+            <input id="history_retention_days" name="history_retention_days" type="number"
+                   min="1" max="3650"
+                   value="{{ config.history_retention_days }}"
+                   class="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono
+                          focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent">
+            <label class="text-sm text-gray-700 whitespace-nowrap" for="history_retention_days">
+              days
+            </label>
+          </div>
+          <p class="text-xs text-gray-500">
+            Based on the run's start timestamp. At least one run is always retained even if it is older.
+          </p>
+        </div>
+
+        <!-- By size -->
+        <div x-show="retentionMode === 'size'" x-transition
+             class="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+          <p class="text-xs font-semibold text-gray-700 uppercase tracking-wide">By size</p>
+          <div class="flex items-center gap-3">
+            <label class="text-sm text-gray-700 whitespace-nowrap" for="history_retention_size_mb">
+              Limit history to
+            </label>
+            <input id="history_retention_size_mb" name="history_retention_size_mb" type="number"
+                   min="1" max="102400"
+                   value="{{ config.history_retention_size_mb }}"
+                   class="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono
+                          focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent">
+            <label class="text-sm text-gray-700 whitespace-nowrap" for="history_retention_size_mb">
+              MB per workspace
+            </label>
+          </div>
+          <p class="text-xs text-gray-500">
+            Oldest runs are removed until the total stored size per workspace is within the limit.
+          </p>
+        </div>
+
+      </div>
+    </section>
+
     <!-- Save button (bottom) -->
     <div class="flex justify-end">
       <button type="submit"
@@ -609,154 +733,871 @@
   </form>
 
   <!-- --------------------------------------------------------
-       Section: Storage Backend (read-only status)
+       Section: Storage Backend (configurable via UI)
        -------------------------------------------------------- -->
-  <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
+           x-data="backendConfigSection()"
+           x-init="init()">
+
+    <!-- Header -->
     <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
       <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
       </svg>
       <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">TERRAFORM_GRAPHICAL Backend</h2>
-      <span class="ml-auto text-xs px-2 py-0.5 rounded-full font-medium
-                   {% if backend_status.type == 'local' %}bg-blue-100 text-blue-700
-                   {% elif backend_status.type == 'aws' %}bg-orange-100 text-orange-700
-                   {% elif backend_status.type == 'gcp' %}bg-red-100 text-red-700
-                   {% elif backend_status.type == 'azure' %}bg-sky-100 text-sky-700{% endif %}">
-        {{ backend_status.label }}
+      <span class="ml-2 text-xs px-2 py-0.5 rounded-full font-medium"
+            :class="{
+              'bg-blue-100 text-blue-700': activeBadgeType === 'local',
+              'bg-orange-100 text-orange-700': activeBadgeType === 'aws',
+              'bg-red-100 text-red-700': activeBadgeType === 'gcp',
+              'bg-sky-100 text-sky-700': activeBadgeType === 'azure'
+            }"
+            x-text="activeBadgeLabel"></span>
+
+      <!-- Env-var override notice -->
+      <span x-show="envOverride"
+            class="ml-auto flex items-center space-x-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.72 3h16.92a2 2 0 001.72-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        <span>Overridden by env var</span>
       </span>
     </div>
 
-    <div class="px-6 py-5 space-y-4">
+    <div class="px-6 py-5 space-y-5">
 
-      <p class="text-xs text-gray-500">
-        Configured via the <code class="font-mono text-gray-700">TERRAFORM_GRAPHICAL_BACKEND</code> environment variable.
-        This section is read-only — set the variables in your shell or <code class="font-mono text-gray-700">.env</code> file.
-      </p>
+      <!-- Env-var override info box -->
+      <div x-show="envOverride"
+           class="flex items-start space-x-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+        <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <p>The <code class="font-mono">TERRAFORM_GRAPHICAL_BACKEND</code> environment variable is set and takes precedence over any configuration saved here. Remove it to use the UI configuration.</p>
+      </div>
 
-      {% if backend_status.type == 'local' %}
-        <!-- Local backend checklist -->
-        <ul class="space-y-2 text-sm">
+      <!-- No portal lock warning (needed to save sensitive fields) -->
+      <div x-show="!hasPassword"
+           class="flex items-start space-x-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
+        <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        <p>A <strong>site password</strong> (portal lock) is required to store encrypted credentials. Set one in the Security section above.</p>
+      </div>
 
-          <!-- TERRAFORM_GRAPHICAL_BACKEND env var -->
-          <li class="flex items-start space-x-3">
-            {% if backend_status.env_var_set %}
-              <span class="mt-0.5 w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                <svg class="w-3 h-3 text-green-600" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                </svg>
-              </span>
-              <div>
-                <p class="font-mono text-xs text-gray-800">TERRAFORM_GRAPHICAL_BACKEND=<span class="text-blue-700">{{ backend_status.env_var_value }}</span></p>
-                <p class="text-xs text-gray-500 mt-0.5">Explicitly set to local filesystem.</p>
-              </div>
-            {% else %}
-              <span class="mt-0.5 w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M20 12H4"/>
-                </svg>
-              </span>
-              <div>
-                <p class="font-mono text-xs text-gray-500">TERRAFORM_GRAPHICAL_BACKEND <span class="text-gray-400">(not set)</span></p>
-                <p class="text-xs text-gray-400 mt-0.5">Defaulting to local filesystem backend.</p>
-              </div>
-            {% endif %}
-          </li>
+      <!-- Backend type selector -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Backend type</label>
+        <div class="grid grid-cols-4 gap-2">
+          <template x-for="opt in typeOptions" :key="opt.value">
+            <button type="button"
+                    @click="selectType(opt.value)"
+                    :class="form.type === opt.value
+                        ? 'border-tf-500 bg-tf-50 text-tf-700 ring-1 ring-tf-400'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600'"
+                    class="flex flex-col items-center justify-center p-3 border rounded-lg transition-all text-xs font-medium gap-1">
+              <span x-html="opt.icon" class="w-6 h-6"></span>
+              <span x-text="opt.label"></span>
+            </button>
+          </template>
+        </div>
+      </div>
 
-          <!-- TERRAFORM_GRAPHICAL_BACKEND_LOCAL_PATH env var -->
-          <li class="flex items-start space-x-3">
-            {% if backend_status.path_var_set %}
-              <span class="mt-0.5 w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                <svg class="w-3 h-3 text-green-600" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                </svg>
-              </span>
-              <div>
-                <p class="font-mono text-xs text-gray-800">TERRAFORM_GRAPHICAL_BACKEND_LOCAL_PATH</p>
-                <p class="text-xs text-gray-500 mt-0.5">Custom path configured.</p>
-              </div>
-            {% else %}
-              <span class="mt-0.5 w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M20 12H4"/>
-                </svg>
-              </span>
-              <div>
-                <p class="font-mono text-xs text-gray-500">TERRAFORM_GRAPHICAL_BACKEND_LOCAL_PATH <span class="text-gray-400">(not set)</span></p>
-                <p class="text-xs text-gray-400 mt-0.5">Using default project directory.</p>
-              </div>
-            {% endif %}
-          </li>
+      <!-- ---- LOCAL ---- -->
+      <div x-show="form.type === 'local'" class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Local storage path <span class="text-gray-400 font-normal">(optional)</span></label>
+          <input type="text" x-model="form.local_path"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                 placeholder="./TERRAFORM_GRAPHICAL_BACKEND">
+          <p class="mt-1 text-xs text-gray-500">Leave empty to use the default project directory.</p>
+        </div>
+      </div>
 
-        </ul>
-
-        <!-- Storage path info box -->
-        <div class="flex items-start space-x-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-          <svg class="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-          </svg>
+      <!-- ---- AWS S3 ---- -->
+      <div x-show="form.type === 'aws'" class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
           <div>
-            <p class="text-xs font-semibold text-gray-700">Storage location</p>
-            <p class="font-mono text-xs text-gray-900 mt-1 break-all">{{ backend_status.path }}</p>
-            <p class="text-xs text-gray-500 mt-1">
-              Execution history, logs, and plan artefacts are stored here.
-              To override, set <code class="font-mono">TERRAFORM_GRAPHICAL_BACKEND_LOCAL_PATH</code>.
-            </p>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Bucket <span class="text-red-500">*</span></label>
+            <input type="text" x-model="form.bucket"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="my-tfg-bucket">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Region <span class="text-red-500">*</span></label>
+            <input type="text" x-model="form.aws_region"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="us-east-1">
           </div>
         </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Path prefix <span class="text-gray-400 font-normal">(optional)</span></label>
+          <input type="text" x-model="form.prefix"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                 placeholder="tfg/data">
+          <p class="mt-1 text-xs text-gray-500">Folder path inside the bucket. Leave empty to store at the root.</p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">AWS Access Key ID <span class="text-red-500">*</span></label>
+            <input type="text" x-model="form.aws_access_key_id" autocomplete="off"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="AKIAIOSFODNN7EXAMPLE">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">AWS Secret Access Key <span class="text-red-500">*</span>
+              <span class="ml-1 text-tf-500 font-normal">🔒 encrypted</span>
+              <span x-show="savedSensitiveFields.includes('aws_secret_access_key') && !form.aws_secret_access_key"
+                    class="relative inline-flex items-center ml-1 group" style="vertical-align:middle">
+                <svg class="w-3.5 h-3.5 text-green-600 cursor-pointer" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+                <span class="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-56 rounded-md bg-gray-900 px-2.5 py-1.5 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
+                  A value is already saved. Leave this field blank to keep it, or type a new key to replace it. You can not view the current value for security reasons.
+                  <span class="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-gray-900"></span>
+                </span>
+              </span>
+            </label>
+            <input type="password" x-model="form.aws_secret_access_key" autocomplete="new-password"
+                   :disabled="!hasPassword"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                   :placeholder="sensitiveFieldPlaceholder">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">STS Role ARN <span class="text-gray-400 font-normal">(optional)</span></label>
+          <input type="text" x-model="form.sts_role_arn"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                 placeholder="arn:aws:iam::123456789012:role/MyRole">
+          <p class="mt-1 text-xs text-gray-500">If set, the app will assume this IAM role via STS before accessing the bucket. Leave empty to use the credentials directly.</p>
+        </div>
+      </div>
 
-      {% else %}
-        <!-- Cloud backend: show env var checklist -->
-        <p class="text-xs font-semibold text-gray-700 mb-2">Required environment variables</p>
-        <ul class="space-y-2">
-          <!-- TERRAFORM_GRAPHICAL_BACKEND itself -->
-          <li class="flex items-center space-x-3">
-            <span class="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-              <svg class="w-3 h-3 text-green-600" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+      <!-- ---- GCP Cloud Storage ---- -->
+      <div x-show="form.type === 'gcp'" class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Bucket <span class="text-red-500">*</span></label>
+            <input type="text" x-model="form.bucket"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="my-tfg-bucket">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">GCP Project</label>
+            <input type="text" x-model="form.gcp_project"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="my-gcp-project">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Path prefix <span class="text-gray-400 font-normal">(optional)</span></label>
+          <input type="text" x-model="form.prefix"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                 placeholder="tfg/data">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Service Account JSON <span class="text-red-500">*</span>
+            <span class="ml-1 text-tf-500 font-normal">🔒 encrypted</span>
+            <span x-show="savedSensitiveFields.includes('google_credentials_json') && !form.google_credentials_json"
+                  class="relative inline-flex items-center ml-1 group" style="vertical-align:middle">
+              <svg class="w-3.5 h-3.5 text-green-600 cursor-pointer" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
               </svg>
+              <span class="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-56 rounded-md bg-gray-900 px-2.5 py-1.5 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
+                A value is already saved. Leave this field blank to keep it, or paste a new JSON to replace it. You can not view the current value for security reasons.
+                <span class="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-gray-900"></span>
+              </span>
             </span>
-            <span class="font-mono text-xs text-gray-800">
-              TERRAFORM_GRAPHICAL_BACKEND=<span class="text-blue-700">{{ backend_status.type }}</span>
+          </label>
+          <textarea x-model="form.google_credentials_json" rows="5"
+                    :disabled="!hasPassword"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-tf-400 disabled:bg-gray-100 disabled:cursor-not-allowed resize-y"
+                    :placeholder="sensitiveFieldPlaceholder"></textarea>
+          <p class="mt-1 text-xs text-gray-500">Paste the full contents of a Google service account key JSON file. Leave empty to use Application Default Credentials.</p>
+        </div>
+      </div>
+
+      <!-- ---- Azure Blob Storage ---- -->
+      <div x-show="form.type === 'azure'" class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Storage Account <span class="text-red-500">*</span></label>
+            <input type="text" x-model="form.azure_storage_account"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="mystorageaccount">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Container <span class="text-red-500">*</span></label>
+            <input type="text" x-model="form.container"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="tfg-data">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Path prefix <span class="text-gray-400 font-normal">(optional)</span></label>
+          <input type="text" x-model="form.prefix"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                 placeholder="tfg/data">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Subscription ID</label>
+            <input type="text" x-model="form.azure_subscription_id"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="00000000-0000-0000-0000-000000000000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Resource Group</label>
+            <input type="text" x-model="form.azure_resource_group"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="my-resource-group">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Tenant ID <span class="text-red-500">*</span></label>
+            <input type="text" x-model="form.azure_tenant_id"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="00000000-0000-0000-0000-000000000000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Client ID <span class="text-red-500">*</span></label>
+            <input type="text" x-model="form.azure_client_id"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="00000000-0000-0000-0000-000000000000">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Client Secret <span class="text-red-500">*</span>
+            <span class="ml-1 text-tf-500 font-normal">🔒 encrypted</span>
+            <span x-show="savedSensitiveFields.includes('azure_client_secret') && !form.azure_client_secret"
+                  class="relative inline-flex items-center ml-1 group" style="vertical-align:middle">
+              <svg class="w-3.5 h-3.5 text-green-600 cursor-pointer" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+              </svg>
+              <span class="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-56 rounded-md bg-gray-900 px-2.5 py-1.5 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
+                A value is already saved. Leave this field blank to keep it, or type a new secret to replace it. You can not view the current value for security reasons.
+                <span class="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-gray-900"></span>
+              </span>
             </span>
-          </li>
-          {% for v in backend_status.vars %}
-            <li class="flex items-start space-x-3">
-              {% if v.set %}
-                <span class="mt-0.5 w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                  <svg class="w-3 h-3 text-green-600" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                  </svg>
-                </span>
-                <div>
-                  <p class="font-mono text-xs text-gray-800">{{ v.name }}</p>
-                  {% if v.hint %}
-                    <p class="font-mono text-xs text-gray-400 mt-0.5">{{ v.hint }}</p>
-                  {% endif %}
-                </div>
-              {% else %}
-                <span class="mt-0.5 w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                  <svg class="w-3 h-3 text-red-600" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
-                </span>
-                <div>
-                  <p class="font-mono text-xs text-red-700">{{ v.name }} <span class="text-red-400 font-sans">(missing)</span></p>
-                </div>
-              {% endif %}
-            </li>
-          {% endfor %}
-        </ul>
-      {% endif %}
+          </label>
+          <input type="password" x-model="form.azure_client_secret" autocomplete="new-password"
+                 :disabled="!hasPassword"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                 :placeholder="sensitiveFieldPlaceholder">
+        </div>
+      </div>
+
+      <!-- Error / success feedback -->
+      <div x-show="errorMsg" class="flex items-start space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+        <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        <span x-text="errorMsg"></span>
+      </div>
+      <div x-show="successMsg" class="flex items-start space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+        <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        <span x-text="successMsg"></span>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="flex items-center space-x-3 pt-1">
+        <button type="button" @click="testConnectivity()"
+                :disabled="testing || saving"
+                class="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2">
+          <span x-show="!testing">Test connectivity</span>
+          <span x-show="testing" class="flex items-center space-x-1">
+            <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+            <span>Testing…</span>
+          </span>
+        </button>
+        <button type="button" @click="saveConfig()"
+                :disabled="saving || testing || !hasPassword && form.type !== 'local'"
+                class="px-4 py-2 text-sm font-medium bg-tf-600 hover:bg-tf-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2">
+          <span x-show="!saving">Save backend config</span>
+          <span x-show="saving" class="flex items-center space-x-1">
+            <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+            <span>Saving…</span>
+          </span>
+        </button>
+      </div>
+
+      <!-- ────────────────────────────────────────────────
+           Migrate data section (always visible for cloud backends)
+           ──────────────────────────────────────────────── -->
+      <div x-show="form.type !== 'local' && !envOverride"
+           x-data="backendMigratePanel()"
+           class="border-t border-gray-100 pt-5 mt-1 space-y-4">
+
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-semibold text-gray-800">Migrate local data → cloud</h3>
+            <p class="text-xs text-gray-500 mt-0.5">
+              Copy executions, variable groups and notification channels from the local filesystem to your active cloud backend.
+            </p>
+          </div>
+          <button type="button" @click="loadDiff()"
+                  :disabled="diffLoading"
+                  class="flex-shrink-0 px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center space-x-1.5">
+            <svg x-show="!diffLoading" class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+            </svg>
+            <svg x-show="diffLoading" class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+            <span x-text="diffLoaded ? 'Refresh diff' : 'Load diff'"></span>
+          </button>
+        </div>
+
+        <!-- diff error -->
+        <div x-show="diffError" class="flex items-start space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+          <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          <span x-text="diffError"></span>
+        </div>
+
+        <!-- diff results table -->
+        <template x-if="diffLoaded && !diffError">
+          <div class="space-y-3">
+
+            <!-- direction banner -->
+            <div class="flex items-center gap-2 text-xs text-gray-600 font-medium">
+              <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-700" x-text="diff.source_label"></span>
+              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+              <span class="px-2 py-0.5 rounded bg-orange-100 text-orange-700" x-text="diff.dest_label"></span>
+            </div>
+
+            <!-- counts table -->
+            <div class="overflow-hidden rounded-lg border border-gray-200">
+              <table class="w-full text-xs">
+                <thead class="bg-gray-50 text-gray-500 uppercase tracking-wide">
+                  <tr>
+                    <th class="px-4 py-2 text-left font-medium">Data type</th>
+                    <th class="px-4 py-2 text-center font-medium" x-text="diff.source_label"></th>
+                    <th class="px-4 py-2 text-center font-medium" x-text="diff.dest_label"></th>
+                    <th class="px-4 py-2 text-center font-medium">Only in source</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 bg-white">
+                  <tr>
+                    <td class="px-4 py-2 text-gray-700 font-medium">Variable groups</td>
+                    <td class="px-4 py-2 text-center" x-text="diff.source_counts.variable_groups"></td>
+                    <td class="px-4 py-2 text-center" x-text="diff.dest_counts.variable_groups"></td>
+                    <td class="px-4 py-2 text-center">
+                      <span x-show="diff.only_in_source.variable_groups.length === 0" class="text-gray-400">—</span>
+                      <span x-show="diff.only_in_source.variable_groups.length > 0"
+                            class="font-semibold text-amber-700"
+                            x-text="diff.only_in_source.variable_groups.join(', ')"></span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-2 text-gray-700 font-medium">Notification channels</td>
+                    <td class="px-4 py-2 text-center" x-text="diff.source_counts.notification_channels"></td>
+                    <td class="px-4 py-2 text-center" x-text="diff.dest_counts.notification_channels"></td>
+                    <td class="px-4 py-2 text-center">
+                      <span x-show="diff.only_in_source.notification_channels.length === 0" class="text-gray-400">—</span>
+                      <span x-show="diff.only_in_source.notification_channels.length > 0"
+                            class="font-semibold text-amber-700"
+                            x-text="diff.only_in_source.notification_channels.join(', ')"></span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-2 text-gray-700 font-medium">Executions</td>
+                    <td class="px-4 py-2 text-center" x-text="diff.source_counts.executions"></td>
+                    <td class="px-4 py-2 text-center" x-text="diff.dest_counts.executions"></td>
+                    <td class="px-4 py-2 text-center">
+                      <span x-show="diff.only_in_source.executions_count === 0" class="text-gray-400">—</span>
+                      <span x-show="diff.only_in_source.executions_count > 0"
+                            class="font-semibold text-amber-700"
+                            x-text="diff.only_in_source.executions_count + ' run(s)'"></span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- "all in sync" banner -->
+            <div x-show="!hasDiff()"
+                 class="flex items-center space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+              <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              <span>Local and cloud are in sync — no migration needed.</span>
+            </div>
+
+            <!-- migrate action -->
+            <div x-show="hasDiff() && !migratedOk" class="flex items-center justify-between">
+              <p class="text-xs text-gray-500">Objects only in cloud (dest) won't be deleted from cloud.</p>
+              <button type="button" @click="runMigration()"
+                      :disabled="migrating"
+                      class="px-4 py-2 text-sm font-medium bg-tf-600 hover:bg-tf-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2">
+                <svg x-show="!migrating" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
+                </svg>
+                <svg x-show="migrating" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                <span x-text="migrating ? 'Migrating…' : 'Migrate now'"></span>
+              </button>
+            </div>
+
+            <!-- migrate error/success -->
+            <div x-show="migrateError" class="flex items-start space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+              <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              <span x-text="migrateError"></span>
+            </div>
+            <div x-show="migratedOk" class="space-y-3">
+              <div class="flex items-start space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                <span x-text="migratedMsg"></span>
+              </div>
+              <div x-show="!deletedOk" class="flex items-center space-x-3">
+                <p class="text-xs text-gray-500 flex-1">Optionally remove the local copies (source data):</p>
+                <button type="button" @click="deleteSource()"
+                        class="px-3 py-1.5 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors">
+                  Delete local source data
+                </button>
+                <button type="button" @click="migratedOk = false; diffLoaded = false"
+                        class="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50">
+                  Keep both
+                </button>
+              </div>
+              <div x-show="deletedOk" class="flex items-center space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                <span>Local source data deleted. Migration complete.</span>
+              </div>
+            </div>
+
+          </div>
+        </template>
+
+      </div>
 
     </div>
   </section>
+
+  <!-- --------------------------------------------------------
+       Migration confirmation modal
+       -------------------------------------------------------- -->
+  <div x-data x-show="$store.bcMigration.open"
+       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" style="display:none">
+    <div @click.stop class="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="text-base font-semibold text-gray-900">Migrate backend data</h3>
+        <button @click="$store.bcMigration.open = false" class="text-gray-400 hover:text-gray-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="px-6 py-5 space-y-4 text-sm text-gray-700">
+        <p>
+          Existing data was detected in the <strong x-text="$store.bcMigration.sourceLabel"></strong> backend.
+          Do you want to migrate it to the new <strong x-text="$store.bcMigration.destLabel"></strong> backend?
+        </p>
+        <p class="text-xs text-gray-500">
+          The migration will copy all execution history, logs, plan artefacts, workspace configs, variable groups, and notification channels to the new backend. The original data will only be deleted after you confirm it below.
+        </p>
+        <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+          <strong>Order of operations:</strong> Copy → Verify → Delete source (with your confirmation).
+        </div>
+
+        <!-- Progress -->
+        <div x-show="$store.bcMigration.migrating" class="flex items-center space-x-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-800">
+          <svg class="animate-spin w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+          <span x-text="$store.bcMigration.progress"></span>
+        </div>
+
+        <!-- Migrated OK — ask to delete source -->
+        <div x-show="$store.bcMigration.migratedOk && !$store.bcMigration.deletedOk"
+             class="space-y-3">
+          <div class="flex items-start space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+            <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span x-text="$store.bcMigration.migratedMsg"></span>
+          </div>
+          <p class="text-xs text-gray-600">Do you want to delete the data from the old <strong x-text="$store.bcMigration.sourceLabel"></strong> backend?</p>
+          <div class="flex space-x-3">
+            <button @click="$store.bcMigration.deleteSource()" type="button"
+                    class="px-3 py-1.5 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors">
+              Yes, delete source data
+            </button>
+            <button @click="$store.bcMigration.open = false" type="button"
+                    class="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+              Keep both
+            </button>
+          </div>
+        </div>
+
+        <!-- Deleted OK -->
+        <div x-show="$store.bcMigration.deletedOk"
+             class="flex items-start space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+          <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          <span>Migration complete. Old data deleted successfully.</span>
+        </div>
+
+        <!-- Error -->
+        <div x-show="$store.bcMigration.errorMsg"
+             class="flex items-start space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+          <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          <span x-text="$store.bcMigration.errorMsg"></span>
+        </div>
+      </div>
+
+      <div class="px-6 py-4 border-t border-gray-100 flex justify-end space-x-3"
+           x-show="!$store.bcMigration.migratedOk && !$store.bcMigration.deletedOk">
+        <button @click="$store.bcMigration.open = false" type="button"
+                class="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+          Skip migration
+        </button>
+        <button @click="$store.bcMigration.startMigration()" type="button"
+                :disabled="$store.bcMigration.migrating"
+                class="px-4 py-2 text-sm font-medium bg-tf-600 hover:bg-tf-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          Migrate data
+        </button>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-100 flex justify-end"
+           x-show="$store.bcMigration.deletedOk">
+        <button @click="$store.bcMigration.open = false" type="button"
+                class="px-4 py-2 text-sm font-medium bg-tf-600 hover:bg-tf-700 text-white rounded-lg transition-colors">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
 
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+  // -----------------------------------------------------------------------
+  // Migration store (shared between backendConfigSection and the modal)
+  // -----------------------------------------------------------------------
+  document.addEventListener('alpine:init', () => {
+    Alpine.store('bcMigration', {
+      open: false,
+      migrating: false,
+      migratedOk: false,
+      deletedOk: false,
+      errorMsg: '',
+      progress: 'Copying data…',
+      migratedMsg: '',
+      sourceLabel: '',
+      destLabel: '',
+      // These are set by backendConfigSection before opening:
+      destType: '',
+      destCreds: {},
+      sourceType: '',
+
+      async startMigration() {
+        this.migrating = true;
+        this.errorMsg = '';
+        this.progress = 'Copying data to new backend…';
+        try {
+          const r = await fetch('/api/backend-config/migrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              dest_type: this.destType,
+              dest_creds: this.destCreds,
+              source_type: this.sourceType,
+            }),
+          });
+          const d = await r.json();
+          if (d.ok) {
+            this.migratedOk = true;
+            let msg = `Migration complete — ${d.count ?? 0} objects copied to ${this.destLabel}.`;
+            if (d.skipped && d.skipped > 0) msg += ` (${d.skipped} empty/unreadable files skipped)`;
+            this.migratedMsg = msg;
+          } else {
+            this.errorMsg = d.error || 'Migration failed.';
+          }
+        } catch(e) {
+          this.errorMsg = String(e);
+        } finally {
+          this.migrating = false;
+        }
+      },
+
+      async deleteSource() {
+        try {
+          const r = await fetch('/api/backend-config/delete-source', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source_type: this.sourceType }),
+          });
+          const d = await r.json();
+          if (d.ok) {
+            this.deletedOk = true;
+          } else {
+            this.errorMsg = d.error || 'Delete failed.';
+          }
+        } catch(e) {
+          this.errorMsg = String(e);
+        }
+      },
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Inline migrate panel component (used inside backendConfigSection)
+  // -----------------------------------------------------------------------
+  function backendMigratePanel() {
+    return {
+      diffLoading: false,
+      diffLoaded: false,
+      diffError: '',
+      diff: null,
+
+      migrating: false,
+      migratedOk: false,
+      migratedMsg: '',
+      migrateError: '',
+      deletedOk: false,
+
+      hasDiff() {
+        if (!this.diff) return false;
+        return (
+          this.diff.only_in_source.variable_groups.length > 0 ||
+          this.diff.only_in_source.notification_channels.length > 0 ||
+          this.diff.only_in_source.executions_count > 0
+        );
+      },
+
+      async loadDiff(preserveResult = false) {
+        this.diffLoading = true;
+        this.diffError = '';
+        this.diffLoaded = false;
+        if (!preserveResult) {
+          this.migratedOk = false;
+          this.migrateError = '';
+          this.deletedOk = false;
+        }
+        try {
+          const r = await fetch('/api/backend-config/diff');
+          const d = await r.json();
+          if (d.ok) {
+            this.diff = d;
+            this.diffLoaded = true;
+          } else {
+            this.diffError = d.error || 'Could not load diff.';
+          }
+        } catch(e) {
+          this.diffError = String(e);
+        } finally {
+          this.diffLoading = false;
+        }
+      },
+
+      async runMigration() {
+        if (!this.diff) return;
+        this.migrating = true;
+        this.migrateError = '';
+        try {
+          const r = await fetch('/api/backend-config/migrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source_type: 'local',
+              dest_type: this.diff.dest,
+            }),
+          });
+          const d = await r.json();
+          if (d.ok) {
+            let msg = `Migration complete — ${d.count ?? 0} objects copied to ${this.diff.dest_label}.`;
+            if (d.skipped && d.skipped > 0) {
+              msg += ` (${d.skipped} files skipped)`;
+            }
+            // Capture warnings before loadDiff() wipes state
+            const warnMsg = (d.errors && d.errors.length)
+              ? `Some files could not be copied:\n• ${d.errors.join('\n• ')}`
+              : '';
+            // Refresh diff without losing the result
+            await this.loadDiff(true);
+            this.migratedOk = true;
+            this.migratedMsg = msg;
+            if (warnMsg) this.migrateError = warnMsg;
+          } else {
+            this.migrateError = d.error || 'Migration failed.';
+          }
+        } catch(e) {
+          this.migrateError = String(e);
+        } finally {
+          this.migrating = false;
+        }
+      },
+
+      async deleteSource() {
+        try {
+          const r = await fetch('/api/backend-config/delete-source', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source_type: 'local' }),
+          });
+          const d = await r.json();
+          if (d.ok) {
+            this.deletedOk = true;
+          } else {
+            this.migrateError = d.error || 'Delete failed.';
+          }
+        } catch(e) {
+          this.migrateError = String(e);
+        }
+      },
+    };
+  }
+
+  // -----------------------------------------------------------------------
+  // Backend config section component
+  // -----------------------------------------------------------------------
+  function backendConfigSection() {
+    const typeLabels = { local: 'Local FS', aws: 'AWS S3', gcp: 'GCP Storage', azure: 'Azure Blob' };
+    const typeIcons = {
+      local: '<svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>',
+      aws:   '<img src="/static/img/aws-s3.png" class="w-7 h-7 object-contain" alt="AWS S3">',
+      gcp:   '<img src="/static/img/google-bucket.png" class="w-7 h-7 object-contain" alt="GCP Storage">',
+      azure: '<img src="/static/img/azure-blob.png" class="w-7 h-7 object-contain" alt="Azure Blob">',
+    };
+
+    return {
+      hasPassword: {{ 'true' if config.lock_password_hash else 'false' }},
+      envOverride: {{ 'true' if backend_status.type != 'local' or backend_status.env_var_set else 'false' }},
+      envType: '{{ backend_status.type }}',
+
+      form: {
+        type: 'local',
+        // common
+        bucket: '', prefix: '',
+        // aws
+        aws_region: 'us-east-1', aws_access_key_id: '', aws_secret_access_key: '', sts_role_arn: '',
+        // gcp
+        gcp_project: '', google_credentials_json: '',
+        // azure
+        container: '', azure_storage_account: '', azure_subscription_id: '',
+        azure_resource_group: '', azure_tenant_id: '', azure_client_id: '', azure_client_secret: '',
+        // local
+        local_path: '',
+      },
+      // Tracks which sensitive fields have an existing encrypted value in storage
+      savedSensitiveFields: [],
+
+      testing: false,
+      saving: false,
+      errorMsg: '',
+      successMsg: '',
+
+      typeOptions: ['local', 'aws', 'gcp', 'azure'].map(v => ({
+        value: v, label: typeLabels[v], icon: typeIcons[v],
+      })),
+
+      get activeBadgeType() {
+        return this.envOverride ? this.envType : this.form.type;
+      },
+      get activeBadgeLabel() {
+        return typeLabels[this.activeBadgeType] || this.activeBadgeType;
+      },
+      get sensitiveFieldPlaceholder() {
+        return this.hasPassword ? 'Enter new value or leave blank to keep current' : 'Set a site password first';
+      },
+
+      async init() {
+        try {
+          const r = await fetch('/api/backend-config');
+          const d = await r.json();
+          if (d.type) {
+            this.form.type = d.type;
+            // Never pre-fill sensitive fields with the mask placeholder — leave them
+            // blank so the placeholder text guides the user to enter a real value.
+            Object.keys(this.form).forEach(k => {
+              if (k !== 'type' && d[k] !== undefined && d[k] !== '\u2022'.repeat(8)) {
+                this.form[k] = d[k];
+              }
+            });
+            // Track which sensitive fields already have a saved value
+            this.savedSensitiveFields = Object.keys(d).filter(k => d[k] === '\u2022'.repeat(8));
+          }
+        } catch(e) {}
+      },
+
+      selectType(t) {
+        this.form.type = t;
+        this.errorMsg = '';
+        this.successMsg = '';
+      },
+
+      async testConnectivity() {
+        this.testing = true;
+        this.errorMsg = '';
+        this.successMsg = '';
+        try {
+          const payload = { ...this.form };
+          const r = await fetch('/api/backend-config/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const d = await r.json();
+          if (d.ok) {
+            this.successMsg = 'Connectivity test passed — write, read and delete probe succeeded.';
+          } else {
+            this.errorMsg = d.error || 'Connectivity test failed.';
+          }
+        } catch(e) {
+          this.errorMsg = String(e);
+        } finally {
+          this.testing = false;
+        }
+      },
+
+      async saveConfig() {
+        this.saving = true;
+        this.errorMsg = '';
+        this.successMsg = '';
+        try {
+          // Detect if there is existing data in the current backend (to offer migration)
+          const hasPreviousData = await this._checkHasData();
+          const previousType = this.form.type !== (await this._getSavedType()) ? (await this._getSavedType()) : null;
+
+          const r = await fetch('/api/backend-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.form),
+          });
+          const d = await r.json();
+          if (d.ok) {
+            this.successMsg = 'Backend configuration saved.';
+            // Offer migration if previously a different backend had data
+            if (hasPreviousData && previousType && previousType !== this.form.type) {
+              const typeLabels2 = { local: 'Local FS', aws: 'AWS S3', gcp: 'GCP Storage', azure: 'Azure Blob' };
+              const mg = Alpine.store('bcMigration');
+              mg.open = false;
+              mg.migratedOk = false;
+              mg.deletedOk = false;
+              mg.errorMsg = '';
+              mg.migrating = false;
+              mg.sourceType = previousType;
+              mg.destType = this.form.type;
+              mg.destCreds = { ...this.form };
+              mg.sourceLabel = typeLabels2[previousType] || previousType;
+              mg.destLabel = typeLabels2[this.form.type] || this.form.type;
+              mg.open = true;
+            }
+          } else {
+            this.errorMsg = d.error || 'Failed to save.';
+          }
+        } catch(e) {
+          this.errorMsg = String(e);
+        } finally {
+          this.saving = false;
+        }
+      },
+
+      async _getSavedType() {
+        try {
+          const r = await fetch('/api/backend-config');
+          const d = await r.json();
+          return (d.type || 'local').toLowerCase();
+        } catch(e) { return 'local'; }
+      },
+
+      async _checkHasData() {
+        // A lightweight check: try listing executions for a sentinel workspace
+        // We just check if the test endpoint responds for the current backend config
+        try {
+          const r = await fetch('/api/workspaces');
+          const ws = await r.json();
+          return Array.isArray(ws) && ws.length > 0;
+        } catch(e) { return false; }
+      },
+    };
+  }
+
+  // -----------------------------------------------------------------------
+  // Original settingsPage component
+  // -----------------------------------------------------------------------
   function settingsPage() {
     return {
       versionsFolder: {{ config.terraform_versions_folder | tojson }},

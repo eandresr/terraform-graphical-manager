@@ -1,0 +1,645 @@
+{% extends "base.html" %}
+
+{% block title %}Notification Channels — {{ config.site_name }}{% endblock %}
+
+{% block content %}
+<div x-data="notificationsGlobal()" x-init="init()" class="max-w-4xl mx-auto py-8 px-6 space-y-6">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold text-gray-800">Notification Channels</h1>
+      <p class="text-sm text-gray-500 mt-0.5">Global management of all notification channels across every workspace.</p>
+    </div>
+    <button @click="openCreate()"
+            class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+      </svg>
+      Add Channel
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div x-show="loading" class="text-center py-16 text-gray-400">
+    <svg class="animate-spin mx-auto w-6 h-6 mb-2" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+    </svg>
+    Loading channels…
+  </div>
+
+  <!-- Empty state -->
+  <div x-show="!loading && channels.length === 0"
+       class="rounded-xl border-2 border-dashed border-gray-200 py-16 text-center">
+    <svg class="mx-auto w-10 h-10 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+    </svg>
+    <p class="text-gray-500 font-medium">No notification channels yet</p>
+    <p class="text-sm text-gray-400 mt-1">Click <strong>Add Channel</strong> to create your first channel.</p>
+  </div>
+
+  <!-- Channel cards -->
+  <template x-for="ch in channels" :key="ch.id">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4">
+        <!-- Left: icon + info -->
+        <div class="flex items-center gap-4 min-w-0">
+          <div class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center"
+               :class="{
+                 'bg-purple-50': ch.type==='slack',
+                 'bg-blue-50':   ch.type==='teams',
+                 'bg-amber-50':  ch.type==='email',
+                 'bg-red-50':    ch.type==='pagerduty',
+                 'bg-orange-50': ch.type==='alertmanager'
+               }">
+            <svg x-show="ch.type==='slack'" class="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.122 2.521a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zm-1.268 0a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zm-2.523 10.122a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zm0-1.268a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/>
+            </svg>
+            <svg x-show="ch.type==='teams'" class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20.625 6H15v12h5.625C21.938 18 23 16.933 23 15.625v-7.25C23 7.067 21.938 6 20.625 6zM12 4a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm6 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 4c-2.67 0-8 1.337-8 4v1h16v-1c0-2.663-5.33-4-8-4z"/>
+            </svg>
+            <svg x-show="ch.type==='email'" class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+            <svg x-show="ch.type==='pagerduty'" class="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M16.156 2c1.71 0 3.031.476 3.781 1.2C20.75 4.024 21 5.12 21 6.2c0 2.2-1.059 4.356-3.375 5.384L14.5 13H19v3h-7v-2.794l3.875-1.862C17.75 10.469 18.5 9.05 18.5 6.2c0-.912-.5-2.2-2.344-2.2C14.594 4 13.5 5.169 13.5 7H11c0-2.956 1.844-5 5.156-5zM5 3h2v18H5z"/>
+            </svg>
+            <svg x-show="ch.type==='alertmanager'" class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+            </svg>
+          </div>
+
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-medium text-gray-800" x-text="ch.name"></span>
+              <span x-show="!ch.enabled" class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">Disabled</span>
+              <span class="text-xs px-1.5 py-0.5 rounded font-medium"
+                    :class="(ch.workspace_ids||[]).includes('*') ? 'bg-indigo-100 text-indigo-700' : 'bg-teal-100 text-teal-700'"
+                    x-text="(ch.workspace_ids||[]).includes('*') ? 'Global' : 'Workspace-scoped'"></span>
+              <span class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded capitalize" x-text="ch.type"></span>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1">
+              <template x-for="t in (ch.notify_on||[])" :key="t">
+                <span class="text-xs px-1.5 py-0.5 rounded"
+                      :class="{
+                        'bg-green-100 text-green-700':   t==='on_success',
+                        'bg-red-100 text-red-700':       t==='on_failure',
+                        'bg-orange-100 text-orange-700': t==='on_sentinel_fail'
+                      }"
+                      x-text="t==='on_success' ? 'On success' : t==='on_failure' ? 'On failure' : 'Sentinel fail'">
+                </span>
+              </template>
+            </div>
+            <p class="text-xs text-gray-400 mt-0.5 truncate" x-show="ch.prefix_template">
+              Prefix: <span class="font-mono" x-text="ch.prefix_template"></span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Right: actions -->
+        <div class="flex items-center gap-2 flex-shrink-0 ml-4">
+          <button @click="testChannel(ch)"
+                  :disabled="testing === ch.id"
+                  class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-50">
+            <svg x-show="testing !== ch.id" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <svg x-show="testing === ch.id" class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+            </svg>
+            Test
+          </button>
+          <span x-show="testResult[ch.id]" x-transition
+                class="text-xs px-2 py-0.5 rounded-full font-medium"
+                :class="testResult[ch.id]?.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'"
+                x-text="testResult[ch.id]?.ok ? 'Sent!' : (testResult[ch.id]?.msg || 'Error')">
+          </span>
+          <button @click="openEdit(ch)"
+                  class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-blue-600 border border-blue-200 hover:bg-blue-50">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+            </svg>
+            Edit
+          </button>
+          <button @click="deleteChannel(ch)"
+                  :disabled="deleting === ch.id"
+                  class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+</div><!-- /max-w -->
+
+<!-- ================================================================
+     MODAL: CREATE / EDIT NOTIFICATION CHANNEL
+     ================================================================ -->
+<div x-show="modalOpen" x-cloak x-transition.opacity
+     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+     @click.self="modalOpen = false"
+     @keydown.escape.window="modalOpen = false">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h2 class="text-lg font-semibold text-gray-800"
+          x-text="editId ? 'Edit Channel' : 'New Notification Channel'"></h2>
+      <button @click="modalOpen = false" class="text-gray-400 hover:text-gray-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="px-6 py-5 space-y-5">
+      <!-- Name -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+        <input type="text" x-model="form.name" placeholder="e.g. Ops Slack #terraform"
+               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+
+      <!-- Type selector -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Channel Type</label>
+        <div class="grid grid-cols-5 gap-2">
+          <template x-for="t in ['slack','teams','email','pagerduty','alertmanager']" :key="t">
+            <button @click="form.type = t; typeChange()"
+                    class="rounded-lg border px-2 py-2 text-sm font-medium capitalize transition"
+                    :class="form.type === t ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-600 hover:border-blue-400'">
+              <span x-text="t === 'pagerduty' ? 'PagerDuty' : t === 'alertmanager' ? 'Alertmanager' : t.charAt(0).toUpperCase() + t.slice(1)"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- ── Slack config ── -->
+      <div x-show="form.type === 'slack'" class="space-y-3">
+        <div class="flex gap-4">
+          <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+            <input type="radio" x-model="form.config.method" value="webhook" class="accent-blue-600"> Incoming Webhook
+          </label>
+          <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+            <input type="radio" x-model="form.config.method" value="token" class="accent-blue-600"> Bot Token (API)
+          </label>
+        </div>
+        <div x-show="(form.config.method||'webhook') === 'webhook'">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Webhook URL <span class="text-red-500">*</span></label>
+          <input type="password" x-model="form.config.webhook_url"
+                 :placeholder="editId && form.config.webhook_url === '***' ? '●●●●●●●● (saved)' : 'https://hooks.slack.com/services/T.../B.../xxx'"
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div x-show="form.config.method === 'token'">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Bot Token <span class="text-red-500">*</span></label>
+          <input type="password" x-model="form.config.token"
+                 :placeholder="editId && form.config.token === '***' ? '●●●●●●●● (saved)' : 'xoxb-...'"
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Channel</label>
+            <input type="text" x-model="form.config.channel" placeholder="#terraform (optional for webhook)"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Bot username</label>
+            <input type="text" x-model="form.config.username" placeholder="TGM Bot (optional)"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" x-model="form.config.verify_ssl" class="rounded"> Verify SSL
+          </label>
+        </div>
+      </div>
+
+      <!-- ── Teams config ── -->
+      <div x-show="form.type === 'teams'" class="space-y-3">
+        <div class="flex gap-4">
+          <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+            <input type="radio" x-model="form.config.method" value="webhook" class="accent-blue-600"> Incoming Webhook
+          </label>
+          <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+            <input type="radio" x-model="form.config.method" value="graph" class="accent-blue-600"> Microsoft Graph API
+          </label>
+        </div>
+        <div x-show="(form.config.method||'webhook') === 'webhook'">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Webhook URL <span class="text-red-500">*</span></label>
+          <input type="password" x-model="form.config.webhook_url"
+                 :placeholder="editId && form.config.webhook_url === '***' ? '●●●●●●●● (saved)' : 'https://xxx.webhook.office.com/webhookb2/...'"
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div x-show="form.config.method === 'graph'" class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tenant ID <span class="text-red-500">*</span></label>
+              <input type="password" x-model="form.config.tenant_id"
+                     :placeholder="editId && form.config.tenant_id === '***' ? '●●●●●●●● (saved)' : 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Client ID <span class="text-red-500">*</span></label>
+              <input type="password" x-model="form.config.client_id"
+                     :placeholder="editId && form.config.client_id === '***' ? '●●●●●●●● (saved)' : 'App (client) ID'"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Client Secret <span class="text-red-500">*</span></label>
+            <input type="password" x-model="form.config.client_secret"
+                   :placeholder="editId && form.config.client_secret === '***' ? '●●●●●●●● (saved)' : 'App client secret value'"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Team ID <span class="text-red-500">*</span></label>
+              <input type="text" x-model="form.config.team_id" placeholder="Teams group/team object ID"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Channel ID <span class="text-red-500">*</span></label>
+              <input type="text" x-model="form.config.channel_id" placeholder="Teams channel object ID"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+        </div>
+        <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+          <input type="checkbox" x-model="form.config.verify_ssl" class="rounded"> Verify SSL certificate
+        </label>
+      </div>
+
+      <!-- ── Email/SMTP config ── -->
+      <div x-show="form.type === 'email'" class="space-y-3">
+        <div class="grid grid-cols-3 gap-3">
+          <div class="col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Host <span class="text-red-500">*</span></label>
+            <input type="text" x-model="form.config.smtp_host" placeholder="smtp.example.com"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Port</label>
+            <input type="number" x-model.number="form.config.smtp_port" placeholder="587"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">From address <span class="text-red-500">*</span></label>
+            <input type="email" x-model="form.config.from_address" placeholder="tgm@example.com"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">To address(es) <span class="text-red-500">*</span></label>
+            <input type="text" x-model="form.config.to_addresses" placeholder="ops@example.com, team@example.com"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Username</label>
+            <input type="text" x-model="form.config.smtp_username" placeholder="(optional)"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Password</label>
+            <input type="password" x-model="form.config.smtp_password" placeholder="(optional)"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+        </div>
+        <div class="flex gap-4">
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" x-model="form.config.use_starttls" class="rounded"> STARTTLS
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" x-model="form.config.use_ssl" class="rounded"> SSL/TLS
+          </label>
+        </div>
+      </div>
+
+      <!-- ── PagerDuty config ── -->
+      <div x-show="form.type === 'pagerduty'" class="space-y-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Routing Key <span class="text-red-500">*</span></label>
+          <input type="text" x-model="form.config.routing_key" placeholder="Events API v2 Integration Key"
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+            <select x-model="form.config.severity"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="critical">Critical</option>
+              <option value="error">Error</option>
+              <option value="warning">Warning</option>
+              <option value="info">Info</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Base URL</label>
+            <input type="url" x-model="form.config.base_url" placeholder="https://events.pagerduty.com (default)"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+        </div>
+        <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+          <input type="checkbox" x-model="form.config.verify_ssl" class="rounded"> Verify SSL certificate
+        </label>
+      </div>
+
+      <!-- ── Alertmanager config ── -->
+      <div x-show="form.type === 'alertmanager'" class="space-y-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Alertmanager URL <span class="text-red-500">*</span></label>
+          <input type="url" x-model="form.config.url" placeholder="http://alertmanager:9093"
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Authentication</label>
+          <div class="flex gap-4">
+            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+              <input type="radio" x-model="form.config.auth_type" value="none" class="accent-blue-600"> None
+            </label>
+            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+              <input type="radio" x-model="form.config.auth_type" value="token" class="accent-blue-600"> Bearer token
+            </label>
+            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+              <input type="radio" x-model="form.config.auth_type" value="basic" class="accent-blue-600"> Basic auth
+            </label>
+          </div>
+        </div>
+        <div x-show="form.config.auth_type === 'token'">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Bearer Token <span class="text-red-500">*</span></label>
+          <input type="password" x-model="form.config.token"
+                 :placeholder="editId && form.config.token === '***' ? '●●●●●●●● (saved)' : 'eyJhb...'"
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div x-show="form.config.auth_type === 'basic'" class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Username <span class="text-red-500">*</span></label>
+            <input type="text" x-model="form.config.username" placeholder="admin"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Password <span class="text-red-500">*</span></label>
+            <input type="password" x-model="form.config.password"
+                   :placeholder="editId && form.config.password === '***' ? '●●●●●●●● (saved)' : ''"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+            <select x-model="form.config.severity"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="critical">Critical</option>
+              <option value="error">Error</option>
+              <option value="warning">Warning</option>
+              <option value="info">Info</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Generator URL</label>
+            <input type="url" x-model="form.config.generator_url" placeholder="http://localhost:5005 (optional)"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+        </div>
+        <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+          <input type="checkbox" x-model="form.config.verify_ssl" class="rounded"> Verify SSL certificate
+        </label>
+      </div>
+
+      <!-- Scope -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Scope</label>
+        <div class="flex gap-4">
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="radio" x-model="form.scope" value="global" class="accent-blue-600"> Global (all workspaces)
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="radio" x-model="form.scope" value="workspace" class="accent-blue-600"> Workspace-specific
+          </label>
+        </div>
+        <p x-show="form.scope === 'workspace'" class="text-xs text-gray-400 mt-1">
+          Workspace-specific channels can be assigned to individual workspaces from the Notifications tab inside each workspace.
+        </p>
+      </div>
+
+      <!-- Enabled toggle -->
+      <div class="flex items-center gap-3">
+        <label class="text-sm font-medium text-gray-700">Enabled</label>
+        <button @click="form.enabled = !form.enabled"
+                :class="form.enabled ? 'bg-blue-600' : 'bg-gray-200'"
+                class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none">
+          <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform"
+                :class="form.enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"></span>
+        </button>
+      </div>
+
+      <!-- Triggers -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Notify on</label>
+        <div class="flex flex-wrap gap-4">
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" value="on_success"
+                   :checked="form.notify_on.includes('on_success')"
+                   @change="e => e.target.checked ? form.notify_on.push('on_success') : form.notify_on.splice(form.notify_on.indexOf('on_success'),1)"
+                   class="rounded accent-green-600"> Success
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" value="on_failure"
+                   :checked="form.notify_on.includes('on_failure')"
+                   @change="e => e.target.checked ? form.notify_on.push('on_failure') : form.notify_on.splice(form.notify_on.indexOf('on_failure'),1)"
+                   class="rounded accent-red-600"> Failure
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" value="on_sentinel_fail"
+                   :checked="form.notify_on.includes('on_sentinel_fail')"
+                   @change="e => e.target.checked ? form.notify_on.push('on_sentinel_fail') : form.notify_on.splice(form.notify_on.indexOf('on_sentinel_fail'),1)"
+                   class="rounded accent-orange-600"> Sentinel policy fail
+          </label>
+        </div>
+      </div>
+
+      <!-- Prefix template -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Prefix template</label>
+        <input type="text" x-model="form.prefix_template" placeholder="[TGM] [{workspace_name}]"
+               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <p class="text-xs text-gray-400 mt-1">
+          Variables: <code>{workspace_name}</code> <code>{workspace_id}</code> <code>{command}</code> <code>{status}</code>
+        </p>
+      </div>
+
+      <!-- Body template -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Body template</label>
+        <textarea x-model="form.body_template" rows="4" placeholder="Leave blank to use the default message body."
+                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        <p class="text-xs text-gray-400 mt-1">
+          Additional variables: <code>{duration}</code> <code>{timestamp}</code> <code>{terraform_version}</code>
+          <code>{sentinel_status}</code> <code>{sentinel_summary}</code>
+        </p>
+      </div>
+
+      <!-- Error -->
+      <p x-show="saveError" x-text="saveError" class="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></p>
+    </div>
+
+    <!-- Footer -->
+    <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+      <button @click="modalOpen = false" class="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+        Cancel
+      </button>
+      <button @click="save()" :disabled="saving"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+        <svg x-show="saving" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+        </svg>
+        <span x-text="editId ? 'Save Changes' : 'Create Channel'"></span>
+      </button>
+    </div>
+  </div>
+</div><!-- /modal -->
+
+<script>
+function notificationsGlobal() {
+  return {
+    channels: [],
+    loading: false,
+    modalOpen: false,
+    editId: null,
+    form: {},
+    saving: false,
+    saveError: null,
+    deleting: null,
+    testing: null,
+    testResult: {},
+
+    async init() {
+      await this.load();
+    },
+
+    async load() {
+      this.loading = true;
+      try {
+        const res = await fetch('/api/notification-channels/all');
+        if (res.ok) this.channels = (await res.json()).channels || [];
+      } catch (_) {}
+      this.loading = false;
+    },
+
+    _defaults() {
+      return {
+        name: '', type: 'slack', enabled: true, scope: 'global',
+        notify_on: ['on_failure', 'on_sentinel_fail'],
+        prefix_template: '[TGM] [{workspace_name}]',
+        body_template: '',
+        config: {
+          method: 'webhook', webhook_url: '', token: '',
+          channel: '', username: '', icon_emoji: '', verify_ssl: true,
+          tenant_id: '', client_id: '', client_secret: '', team_id: '', channel_id: '',
+          smtp_host: '', smtp_port: 587, from_address: '', to_addresses: '',
+          smtp_username: '', smtp_password: '', use_starttls: true, use_ssl: false,
+          routing_key: '', severity: 'error', base_url: '',
+          url: '', auth_type: 'none', password: '', generator_url: '',
+        },
+      };
+    },
+
+    openCreate() {
+      this.editId = null;
+      this.saveError = null;
+      this.form = this._defaults();
+      this.modalOpen = true;
+    },
+
+    openEdit(ch) {
+      this.editId = ch.id;
+      this.saveError = null;
+      this.form = {
+        name: ch.name || '',
+        type: ch.type || 'slack',
+        enabled: ch.enabled !== false,
+        scope: (ch.workspace_ids || []).includes('*') ? 'global' : 'workspace',
+        notify_on: [...(ch.notify_on || [])],
+        prefix_template: ch.prefix_template || '[TGM] [{workspace_name}]',
+        body_template: ch.body_template || '',
+        config: Object.assign(this._defaults().config, ch.config || {}),
+      };
+      this.modalOpen = true;
+    },
+
+    typeChange() {
+      const keep = { verify_ssl: this.form.config.verify_ssl, method: 'webhook', auth_type: 'none' };
+      this.form.config = Object.assign(this._defaults().config, keep);
+    },
+
+    async save() {
+      if (!this.form.name.trim()) { this.saveError = 'Channel name is required.'; return; }
+      this.saveError = null;
+      this.saving = true;
+      const payload = {
+        ...this.form,
+        workspace_ids: this.form.scope === 'global' ? ['*'] : [],
+      };
+      try {
+        let res;
+        if (this.editId) {
+          res = await fetch(`/api/notification-channels/${this.editId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        } else {
+          res = await fetch('/api/notification-channels', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        }
+        if (res.ok) {
+          this.modalOpen = false;
+          await this.load();
+        } else {
+          const d = await res.json().catch(() => ({}));
+          this.saveError = d.error || 'Failed to save channel.';
+        }
+      } catch (_) { this.saveError = 'Network error — channel not saved.'; }
+      this.saving = false;
+    },
+
+    async deleteChannel(ch) {
+      if (!confirm(`Delete channel "${ch.name}"? This cannot be undone.`)) return;
+      this.deleting = ch.id;
+      try {
+        const res = await fetch(`/api/notification-channels/${ch.id}`, { method: 'DELETE' });
+        if (res.ok) await this.load();
+      } catch (_) {}
+      this.deleting = null;
+    },
+
+    async testChannel(ch) {
+      this.testing = ch.id;
+      this.testResult = { ...this.testResult, [ch.id]: null };
+      try {
+        const res = await fetch(`/api/notification-channels/${ch.id}/test`, { method: 'POST' });
+        const d = await res.json().catch(() => ({}));
+        this.testResult = { ...this.testResult, [ch.id]: { ok: res.ok, msg: d.message || d.error || '' } };
+        setTimeout(() => { this.testResult = { ...this.testResult, [ch.id]: null }; }, 5000);
+      } catch (_) {
+        this.testResult = { ...this.testResult, [ch.id]: { ok: false, msg: 'Network error' } };
+      }
+      this.testing = null;
+    },
+  };
+}
+</script>
+{% endblock %}

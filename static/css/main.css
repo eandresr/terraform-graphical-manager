@@ -136,7 +136,7 @@ code, pre, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; 
 }
 
 /* ================================================================
-   PROVIDER BADGES
+   PROVIDER BADGES (legacy — kept for execution detail / modal pages)
    ================================================================ */
 
 .provider-badge {
@@ -157,6 +157,45 @@ code, pre, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; 
 .provider-github  { background-color: #f3f4f6; color: #1f2937; border: 1px solid #9ca3af; }
 .provider-datadog { background-color: #fff8e1; color: #f57f17; border: 1px solid #fff176; }
 .provider-vault   { background-color: #f3e5f5; color: #6a1b9a; border: 1px solid #ce93d8; }
+
+/* ================================================================
+   PROVIDERS PILL  —  single combined "providers: aws, gcp" badge
+   ================================================================ */
+
+.providers-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+.providers-pill__key {
+  padding: 0.15rem 0.4rem;
+  background-color: #f3f4f6;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+.providers-pill__val {
+  padding: 0.15rem 0.45rem;
+  background-color: #ffffff;
+  color: #374151;
+  text-transform: lowercase;
+}
+
+/* Sidebar variant — slightly smaller */
+.providers-pill--sm {
+  font-size: 0.6rem;
+  max-width: 10rem;
+}
+.providers-pill--sm .providers-pill__val {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 7rem;
+}
 
 /* ================================================================
    LOG / TERMINAL OUTPUT

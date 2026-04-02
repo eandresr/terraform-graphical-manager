@@ -1,0 +1,1150 @@
+{% extends "base.html" %}
+
+{% block title %}API Reference — {{ site_name }}{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Method badge colours ─────────────────────────────────────────── */
+  .method-get    { background:#d1fae5; color:#065f46; border-color:#6ee7b7; }
+  .method-post   { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
+  .method-put    { background:#dbeafe; color:#1e40af; border-color:#93c5fd; }
+  .method-delete { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+  .method-patch  { background:#ede9fe; color:#5b21b6; border-color:#c4b5fd; }
+
+  /* ── Endpoint row hover ───────────────────────────────────────────── */
+  .endpoint-row { transition: background .15s; }
+  .endpoint-row:hover { background: #f8fafc; }
+
+  /* ── Try-it panel ─────────────────────────────────────────────────── */
+  .try-panel textarea,
+  .try-panel input[type=text],
+  .try-panel input[type=password] {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+  }
+
+  /* ── Response body ────────────────────────────────────────────────── */
+  .resp-body {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  /* ── Path param highlight ─────────────────────────────────────────── */
+  .path-param { color: #7c3aed; font-weight: 600; }
+
+  /* ── Sticky section headers ──────────────────────────────────────── */
+  .group-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(6px);
+  }
+
+  /* Smooth open/close */
+  [x-cloak] { display: none !important; }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+  <span class="text-gray-400 text-sm">API Reference</span>
+{% endblock %}
+
+{% block content %}
+<div
+  x-data="apiDocs()"
+  x-init="init()"
+  class="max-w-6xl mx-auto space-y-6"
+>
+
+  <!-- ================================================================
+       PAGE HEADER
+       ================================================================ -->
+  <div class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+    <div class="flex items-start justify-between gap-6">
+      <div>
+        <div class="flex items-center gap-3 mb-2">
+          <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-tf-100 text-tf-700 border border-tf-200">
+            REST API
+          </span>
+          <span class="text-xs text-gray-500 font-mono">Base URL: <code class="bg-gray-100 px-1.5 py-0.5 rounded text-gray-700">/api</code></span>
+          <span class="text-xs text-gray-500">·</span>
+          <span class="text-xs text-gray-500">Content-Type: <code class="bg-gray-100 px-1 py-0.5 rounded text-gray-700">application/json</code></span>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900 mb-1">Terraform Graphical Manager API</h1>
+        <p class="text-gray-500 text-sm max-w-2xl">
+          All UI features are powered by this JSON REST API. Every endpoint is documented
+          below and can be exercised live from this page. All requests are made against
+          the running TGM instance.
+        </p>
+      </div>
+      <div class="flex-shrink-0 text-right">
+        <p class="text-xs text-gray-400 mb-1">API version</p>
+        <span class="text-sm font-mono font-semibold text-gray-700">v1.1.0</span>
+      </div>
+    </div>
+
+    <!-- Auth info banner -->
+    <div class="mt-5 rounded-xl border {% if has_portal %}border-amber-200 bg-amber-50{% else %}border-gray-200 bg-gray-50{% endif %} p-4">
+      {% if has_portal %}
+      {# Portal is locked — show Bearer token instructions #}
+      <div class="flex items-start gap-3">
+        <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold text-amber-800 mb-1">Portal lock is enabled — authentication required</p>
+          <p class="text-xs text-amber-700 mb-3">
+            All API requests must carry a <code class="bg-amber-100 px-1 rounded">Bearer</code> token in the
+            <code class="bg-amber-100 px-1 rounded">Authorization</code> header, or the request must originate from
+            an authenticated browser session (session cookie). The token is derived from your portal password
+            and can be retrieved below.
+          </p>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button
+              @click="fetchToken()"
+              :disabled="tokenLoading"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-60"
+            >
+              <svg x-show="!tokenLoading" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+              </svg>
+              <svg x-show="tokenLoading" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+              </svg>
+              <span x-text="tokenLoading ? 'Loading…' : 'Get Bearer token'"></span>
+            </button>
+            <div x-show="apiToken" x-cloak class="flex items-center gap-2 min-w-0">
+              <code class="block bg-white border border-amber-200 rounded px-2 py-1 text-xs font-mono text-amber-900 max-w-xs truncate" x-text="apiToken"></code>
+              <button @click="copyToken()" class="text-amber-600 hover:text-amber-800 text-xs underline whitespace-nowrap" x-text="tokenCopied ? 'Copied!' : 'Copy'"></button>
+            </div>
+            <p x-show="tokenError" x-cloak class="text-red-600 text-xs" x-text="tokenError"></p>
+          </div>
+          <p class="text-xs text-amber-600 mt-2">
+            Usage: <code class="bg-amber-100 px-1 rounded">Authorization: Bearer &lt;token&gt;</code>
+          </p>
+        </div>
+      </div>
+      {% else %}
+      {# No portal lock #}
+      <div class="flex items-start gap-3">
+        <svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
+        </svg>
+        <div>
+          <p class="text-sm font-semibold text-green-800 mb-1">No authentication required</p>
+          <p class="text-xs text-green-700">
+            The portal lock is not enabled. All endpoints accept unauthenticated requests.
+            To enable authentication, set a portal password in <a href="{{ url_for('settings.settings_page') }}" class="underline">Settings → Portal Security</a>.
+          </p>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Global filters -->
+    <div class="mt-4 flex items-center gap-3 flex-wrap">
+      <div class="relative flex-1 min-w-48">
+        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z"/>
+        </svg>
+        <input
+          type="text"
+          x-model="filter"
+          placeholder="Filter endpoints…"
+          class="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-tf-400/40 focus:border-tf-400"
+        />
+      </div>
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <template x-for="m in ['GET','POST','PUT','DELETE']" :key="m">
+          <button
+            @click="toggleMethod(m)"
+            :class="activeMethodFilters.includes(m) ? methodBadgeActive(m) : 'bg-gray-100 text-gray-500 border-gray-200'"
+            class="px-2.5 py-1 rounded-full text-xs font-bold border transition-colors"
+            x-text="m"
+          ></button>
+        </template>
+      </div>
+      <button @click="collapseAll()" class="text-xs text-gray-400 hover:text-gray-700 transition-colors whitespace-nowrap">Collapse all</button>
+      <button @click="expandAll()" class="text-xs text-gray-400 hover:text-gray-700 transition-colors whitespace-nowrap">Expand all</button>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       ENDPOINT GROUPS
+       ================================================================ -->
+  <template x-for="group in visibleGroups()" :key="group.id">
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+
+      <!-- Group header -->
+      <div
+        class="group-header bg-white border-b border-gray-100 px-5 py-3.5 flex items-center justify-between cursor-pointer select-none"
+        @click="toggleGroup(group.id)"
+      >
+        <div class="flex items-center gap-3">
+          <span class="text-base font-semibold text-gray-800" x-text="group.name"></span>
+          <span class="text-xs text-gray-400" x-text="visibleEndpoints(group).length + ' endpoints'"></span>
+        </div>
+        <div class="flex items-center gap-2">
+          <svg
+            class="w-4 h-4 text-gray-400 transition-transform duration-200"
+            :class="openGroups.includes(group.id) ? 'rotate-180' : ''"
+            fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Endpoint list -->
+      <div x-show="openGroups.includes(group.id)" x-collapse>
+        <template x-for="ep in visibleEndpoints(group)" :key="ep.id">
+          <div class="border-b border-gray-100 last:border-b-0 py-1">
+
+            <!-- Endpoint row (click to expand try-it) -->
+            <div
+              class="endpoint-row px-5 py-4 flex items-start gap-4 cursor-pointer"
+              @click="toggleEndpoint(ep.id)"
+            >
+              <!-- Method badge -->
+              <span
+                class="flex-shrink-0 mt-0.5 inline-flex items-center justify-center w-16 text-center text-xs font-bold px-2 py-0.5 rounded border"
+                :class="'method-' + ep.method.toLowerCase()"
+                x-text="ep.method"
+              ></span>
+
+              <!-- Path + description -->
+              <div class="flex-1 min-w-0">
+                <code class="text-sm font-mono text-gray-800 break-all" x-html="formatPath(ep.path)"></code>
+                <p class="text-xs text-gray-500 mt-0.5" x-text="ep.summary"></p>
+              </div>
+
+              <!-- Auth badge -->
+              <div class="flex-shrink-0 flex items-center gap-2 mt-0.5">
+                <template x-if="ep.auth === false">
+                  <span class="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
+                    </svg>
+                    open
+                  </span>
+                </template>
+                <template x-if="ep.auth === true && {{ 'true' if has_portal else 'false' }}">
+                  <span class="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    auth
+                  </span>
+                </template>
+                <svg
+                  class="w-4 h-4 text-gray-300 transition-transform duration-200"
+                  :class="openEndpoints.includes(ep.id) ? 'rotate-180' : ''"
+                  fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </div>
+            </div>
+
+            <!-- Try-it panel -->
+            <div x-show="openEndpoints.includes(ep.id)" x-collapse class="try-panel bg-gray-50 border-t border-gray-100 px-5 py-4 space-y-4">
+
+              <!-- Description -->
+              <p x-show="ep.description" class="text-xs text-gray-600 leading-relaxed" x-text="ep.description"></p>
+
+              <!-- Path parameters -->
+              <template x-if="ep.pathParams && ep.pathParams.length">
+                <div class="space-y-2">
+                  <p class="text-xs font-semibold text-gray-700 uppercase tracking-wider">Path parameters</p>
+                  <template x-for="param in ep.pathParams" :key="param.name">
+                    <div class="flex items-center gap-2">
+                      <label class="text-xs font-mono text-violet-600 w-32 flex-shrink-0" x-text="'{' + param.name + '}'"></label>
+                      <input
+                        type="text"
+                        :placeholder="param.desc"
+                        x-model="tryState[ep.id + '_param_' + param.name]"
+                        class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-tf-400"
+                      />
+                      <span class="text-xs text-gray-400" x-text="param.required ? 'required' : 'optional'"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+              <!-- Query parameters -->
+              <template x-if="ep.queryParams && ep.queryParams.length">
+                <div class="space-y-2">
+                  <p class="text-xs font-semibold text-gray-700 uppercase tracking-wider">Query parameters</p>
+                  <template x-for="param in ep.queryParams" :key="param.name">
+                    <div class="flex items-center gap-2">
+                      <label class="text-xs font-mono text-blue-600 w-32 flex-shrink-0" x-text="'?' + param.name"></label>
+                      <input
+                        type="text"
+                        :placeholder="param.desc + (param.example ? ' e.g. ' + param.example : '')"
+                        x-model="tryState[ep.id + '_query_' + param.name]"
+                        class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-tf-400"
+                      />
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+              <!-- Request body -->
+              <template x-if="ep.body">
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <p class="text-xs font-semibold text-gray-700 uppercase tracking-wider">Request body</p>
+                    <button @click="setExampleBody(ep)" class="text-xs text-tf-600 hover:text-tf-800 underline">Load example</button>
+                  </div>
+                  <textarea
+                    rows="5"
+                    :placeholder="JSON.stringify(ep.body.example, null, 2)"
+                    x-model="tryState[ep.id + '_body']"
+                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-tf-400 resize-y"
+                  ></textarea>
+                  <p class="text-xs text-gray-400" x-text="ep.body.desc || ''"></p>
+                </div>
+              </template>
+
+              <!-- Auth token (shown if portal is locked) -->
+              {% if has_portal %}
+              <div class="flex items-center gap-2">
+                <label class="text-xs font-semibold text-amber-700 w-32 flex-shrink-0">Bearer token</label>
+                <input
+                  type="password"
+                  placeholder="Paste token or click 'Get Bearer token' above"
+                  x-model="globalToken"
+                  class="flex-1 border border-amber-200 bg-amber-50 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
+                />
+              </div>
+              {% endif %}
+
+              <!-- Execute button -->
+              <div class="flex items-center gap-3">
+                <button
+                  @click="execute(ep)"
+                  :disabled="tryState[ep.id + '_loading']"
+                  class="inline-flex items-center gap-1.5 px-4 py-1.5 bg-tf-600 hover:bg-tf-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-60"
+                >
+                  <svg x-show="!tryState[ep.id + '_loading']" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <svg x-show="tryState[ep.id + '_loading']" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                  </svg>
+                  <span x-text="tryState[ep.id + '_loading'] ? 'Sending…' : 'Send request'"></span>
+                </button>
+                <span x-show="tryState[ep.id + '_url']" class="text-xs font-mono text-gray-400" x-text="tryState[ep.id + '_url']"></span>
+              </div>
+
+              <!-- Response panel -->
+              <div x-show="tryState[ep.id + '_resp'] !== null" class="space-y-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold text-gray-700">Response</span>
+                    <span
+                      class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border"
+                      :class="tryState[ep.id + '_status'] < 300 ? 'bg-green-50 text-green-700 border-green-200' :
+                              tryState[ep.id + '_status'] < 500 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                              'bg-red-50 text-red-700 border-red-200'"
+                      x-text="tryState[ep.id + '_status'] || 'Error'"
+                    ></span>
+                    <button @click="copyResponse(ep.id)" class="text-xs text-gray-400 hover:text-gray-700 underline ml-auto" x-text="resCopied[ep.id] ? 'Copied!' : 'Copy'"></button>
+                  </div>
+                  <pre
+                    class="resp-body bg-gray-900 text-green-300 rounded-xl p-4 text-xs leading-relaxed"
+                    x-text="tryState[ep.id + '_resp']"
+                  ></pre>
+              </div><!-- /response panel -->
+
+              <!-- Response schema hints -->
+              <template x-if="ep.responses">
+                <div class="pl-4 border-l-2 border-gray-200 space-y-2">
+                  <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Response codes</p>
+                  <template x-for="r in ep.responses" :key="r.code">
+                    <div class="flex items-start gap-2 text-xs">
+                      <span
+                        class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-bold"
+                        :class="r.code < 300 ? 'bg-green-100 text-green-700' :
+                                r.code < 400 ? 'bg-blue-100 text-blue-700' :
+                                r.code < 500 ? 'bg-amber-100 text-amber-700' :
+                                'bg-red-100 text-red-700'"
+                        x-text="r.code"
+                      ></span>
+                      <span class="text-gray-600" x-text="r.desc"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+
+  <!-- Empty state -->
+  <div x-show="visibleGroups().length === 0" class="text-center py-16 text-gray-400">
+    <svg class="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z"/>
+    </svg>
+    <p class="text-sm">No endpoints match your filter.</p>
+    <button @click="filter=''; activeMethodFilters=[]" class="mt-2 text-xs text-tf-600 underline">Clear filters</button>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}{{ super() }}
+<script>
+/* ======================================================================
+   API DOCS ALPINE COMPONENT
+   ====================================================================== */
+function apiDocs() {
+  return {
+    /* ── state ──────────────────────────────────────────────────────── */
+    filter: '',
+    activeMethodFilters: [],
+    openGroups: [],
+    openEndpoints: [],
+    tryState: {},   /* keyed by ep.id + '_param_X', '_body', '_loading', '_resp', '_status', '_url' */
+    globalToken: '',
+    apiToken: '',
+    tokenLoading: false,
+    tokenError: '',
+    tokenCopied: false,
+    resCopied: {},
+
+    /* ── endpoint catalogue ─────────────────────────────────────────── */
+    groups: [
+
+      /* ── Workspaces ─────────────────────────────────────────────── */
+      { id: 'workspaces', name: '🗂️ Workspaces', endpoints: [
+        {
+          id: 'ws-list', method: 'GET', path: '/api/workspaces', auth: false,
+          summary: 'List all discovered workspaces',
+          description: 'Returns a flat list of all Terraform workspaces found under the configured repos_root directory. Each entry includes the workspace ID, name, relative path, detected providers and backend.',
+          pathParams: [], queryParams: [], body: null,
+          responses: [ {code:200, desc:'Array of workspace objects'} ],
+        },
+        {
+          id: 'ws-get', method: 'GET', path: '/api/workspace/{workspace_id}', auth: false,
+          summary: 'Get a single workspace',
+          description: 'Returns the full workspace object for the given workspace ID, including providers, backend, git info, and abs_path.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID (hashed path)', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'Workspace object'}, {code:404, desc:'Workspace not found'} ],
+        },
+        {
+          id: 'ws-creds', method: 'GET', path: '/api/workspace/{workspace_id}/credentials', auth: false,
+          summary: 'Check provider credential status',
+          description: 'Returns which credential environment variables are set for each detected provider, without revealing their values.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{providers, credentials}'} ],
+        },
+        {
+          id: 'ws-execs', method: 'GET', path: '/api/workspace/{workspace_id}/executions', auth: false,
+          summary: 'List executions for a workspace',
+          description: 'Returns all executions (queued, running, and historical) for the workspace, sorted newest-first.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'Array of execution objects'} ],
+        },
+        {
+          id: 'ws-stats', method: 'GET', path: '/api/workspace/{workspace_id}/stats', auth: false,
+          summary: 'Run history time-series for charts',
+          description: 'Returns up to the last 50 terminal executions with duration, command, status, and resource counts — consumed by the Chart.js run history charts in the Overview tab.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{series: [{timestamp, command, status, duration_seconds, resource_counts}]}'} ],
+        },
+        {
+          id: 'ws-state', method: 'GET', path: '/api/workspace/{workspace_id}/state', auth: false,
+          summary: 'Parsed Terraform state',
+          description: 'Runs terraform state pull and returns the parsed resource tree.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'Parsed state object'}, {code:500, desc:'Could not retrieve state'} ],
+        },
+        {
+          id: 'ws-graph', method: 'GET', path: '/api/workspace/{workspace_id}/graph', auth: false,
+          summary: 'Dependency graph (D3)',
+          description: 'Runs terraform graph, parses the DOT output, and returns {nodes, links} for the D3.js force-directed graph renderer.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{nodes: [...], links: [...]}'}, {code:500, desc:'Could not generate graph'} ],
+        },
+        {
+          id: 'ws-drift', method: 'GET', path: '/api/workspace/{workspace_id}/drift', auth: false,
+          summary: 'Drift detection',
+          description: 'Runs terraform plan -refresh-only and reports whether configuration drift exists.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{has_drift: bool, changes: [...]}'} ],
+        },
+        {
+          id: 'ws-lock', method: 'GET', path: '/api/workspace/{workspace_id}/lock', auth: false,
+          summary: 'State lock status',
+          description: 'Checks whether the workspace backend has an active Terraform state lock.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{locked: bool}'} ],
+        },
+        {
+          id: 'ws-output', method: 'GET', path: '/api/workspace/{workspace_id}/output', auth: false,
+          summary: 'Terraform outputs',
+          description: 'Runs terraform output -json. Sensitive output values are masked as ***sensitive***.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'Dict of output name → {type, value, sensitive}'}, {code:500, desc:'workspace not initialized'} ],
+        },
+        {
+          id: 'ws-resource-history', method: 'GET', path: '/api/workspace/{workspace_id}/resource-history', auth: false,
+          summary: 'Per-resource run history',
+          description: 'Returns a map of resource address → list of execution snapshots, used to track resource state changes across runs.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'Dict of resource_address → [{snapshot}]'} ],
+        },
+        {
+          id: 'ws-tfvars', method: 'GET', path: '/api/workspace/{workspace_id}/tfvars-files', auth: false,
+          summary: 'Variable sources priority view',
+          description: 'Returns all variable sources (auto .tfvars, manual .tfvars, variable group vars, workspace vars, and .tf defaults) with their priority order.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{auto_files, manual_files, defaults, groups, ws_vars}'} ],
+        },
+      ]},
+
+      /* ── Executions ─────────────────────────────────────────────── */
+      { id: 'executions', name: '▶ Executions', endpoints: [
+        {
+          id: 'run-submit', method: 'POST', path: '/api/workspace/{workspace_id}/run', auth: true,
+          summary: 'Submit a plan / apply / destroy',
+          description: 'Queues a new Terraform execution. The execution runs in an isolated environment — credentials are injected only for this request and never persisted to disk.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [],
+          body: {
+            desc: 'command is required (plan | apply | destroy). env_vars are provider credentials for this run only. plan_execution_id references an existing plan to apply. terraform_version_override overrides the pinned version ("system" = PATH binary).',
+            example: { command:'plan', env_vars:{AWS_ACCESS_KEY_ID:'AKIA…',AWS_SECRET_ACCESS_KEY:'…',AWS_DEFAULT_REGION:'us-east-1'}, plan_execution_id:null, terraform_version_override:'' },
+          },
+          responses: [
+            {code:200, desc:'{execution_id, status}'},
+            {code:400, desc:'Invalid command'},
+            {code:403, desc:'Sentinel enforcement blocked apply'},
+            {code:423, desc:'Workspace is locked'},
+          ],
+        },
+        {
+          id: 'exec-get', method: 'GET', path: '/api/executions/{execution_id}', auth: false,
+          summary: 'Get execution status',
+          description: 'Returns the full execution object including status, command, timestamps, duration, and resource counts.',
+          pathParams: [{name:'execution_id', desc:'Execution UUID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'Execution object'}, {code:404, desc:'Execution not found'} ],
+        },
+        {
+          id: 'exec-logs', method: 'GET', path: '/api/executions/{execution_id}/logs', auth: false,
+          summary: 'Stream execution logs',
+          description: 'Returns log lines from the given byte offset. Poll with increasing offset to stream logs incrementally.',
+          pathParams: [{name:'execution_id', desc:'Execution UUID', required:true}],
+          queryParams: [{name:'offset', desc:'Start from this line index', example:'0'}],
+          body: null,
+          responses: [ {code:200, desc:'{lines: [...], total: N}'}, {code:404, desc:'Execution not found'} ],
+        },
+        {
+          id: 'exec-plan', method: 'GET', path: '/api/executions/{execution_id}/plan', auth: false,
+          summary: 'Parsed plan diff',
+          description: 'Returns the parsed terraform plan diff (resource_changes) from plan.json.',
+          pathParams: [{name:'execution_id', desc:'Execution UUID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'Parsed plan diff object'}, {code:404, desc:'No plan available'} ],
+        },
+        {
+          id: 'exec-cancel', method: 'POST', path: '/api/executions/{execution_id}/cancel', auth: true,
+          summary: 'Cancel a running execution',
+          description: 'Sends SIGTERM to the running Terraform process. Has no effect on completed or queued executions.',
+          pathParams: [{name:'execution_id', desc:'Execution UUID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{ok: true|false}'} ],
+        },
+      ]},
+
+      /* ── Execution Lock ─────────────────────────────────────────── */
+      { id: 'exec-lock', name: '🔒 Workspace Execution Lock', endpoints: [
+        {
+          id: 'elock-get', method: 'GET', path: '/api/workspace/{workspace_id}/execution-lock', auth: false,
+          summary: 'Get active execution lock',
+          description: 'Returns the current execution lock for the workspace (set automatically when a run starts or manually via POST).',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{locked: bool, lock: {execution_id, command, started_at, reason}|null}'} ],
+        },
+        {
+          id: 'elock-set', method: 'POST', path: '/api/workspace/{workspace_id}/execution-lock', auth: true,
+          summary: 'Manually lock a workspace',
+          description: 'Creates a manual lock with a required reason string. Prevents new runs from starting until the lock is cleared.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [],
+          body: { desc:'reason is required.', example:{reason:'Maintenance window — do not apply'} },
+          responses: [ {code:200, desc:'{ok:true, lock:...}'}, {code:400, desc:'reason is required'} ],
+        },
+        {
+          id: 'elock-del', method: 'DELETE', path: '/api/workspace/{workspace_id}/execution-lock', auth: true,
+          summary: 'Force-clear execution lock',
+          description: 'Removes any active execution lock. Use with caution — clearing a lock while a run is in progress may cause inconsistent state.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{ok:true}'} ],
+        },
+      ]},
+
+      /* ── Terraform Versions ─────────────────────────────────────── */
+      { id: 'versions', name: '📦 Terraform Versions', endpoints: [
+        {
+          id: 'ver-list', method: 'GET', path: '/api/versions', auth: false,
+          summary: 'List available local Terraform versions',
+          description: 'Returns all local binaries found in the configured versions_folder, plus the system Terraform version from PATH.',
+          pathParams: [], queryParams: [], body: null,
+          responses: [ {code:200, desc:'{system_version, versions_folder, default_version, available:[...]}'} ],
+        },
+        {
+          id: 'ver-get', method: 'GET', path: '/api/workspace/{workspace_id}/version', auth: false,
+          summary: 'Get workspace pinned version',
+          description: 'Returns the workspace-pinned version, the effective version, and the global default.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{pinned_version, effective_version, default_version}'} ],
+        },
+        {
+          id: 'ver-set', method: 'POST', path: '/api/workspace/{workspace_id}/version', auth: true,
+          summary: 'Pin a Terraform version for a workspace',
+          description: 'Saves the version pin into workspace_config.json. Pass "system" or omit the field to clear the pin.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [],
+          body: { desc:'version: a version string like "1.6.0" or "system" to use PATH binary.', example:{version:'1.6.0'} },
+          responses: [ {code:200, desc:'{ok:true, version}'} ],
+        },
+      ]},
+
+      /* ── Workspace Variables ────────────────────────────────────── */
+      { id: 'ws-vars', name: '🔑 Workspace Variables', endpoints: [
+        {
+          id: 'vars-get', method: 'GET', path: '/api/workspace/{workspace_id}/vars', auth: true,
+          summary: 'Get individual workspace variables',
+          description: 'Returns all per-workspace variables. Sensitive values are masked as "***".',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'Array of {key, value, type, sensitive}'} ],
+        },
+        {
+          id: 'vars-put', method: 'PUT', path: '/api/workspace/{workspace_id}/vars', auth: true,
+          summary: 'Save workspace variables',
+          description: 'Persists all workspace variables. Sensitive values are encrypted with the portal password. Leaving value blank for an existing sensitive variable preserves the stored encrypted blob.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [],
+          body: { desc:'variables: array of {key, value, type, sensitive}. type is "terraform" (TF_VAR_*) or "env" (plain env).', example:{variables:[{key:'environment',value:'prod',type:'terraform',sensitive:false}]} },
+          responses: [ {code:200, desc:'{ok:true}'}, {code:400, desc:'Portal lock required for sensitive variables'} ],
+        },
+      ]},
+
+      /* ── Variable Groups ────────────────────────────────────────── */
+      { id: 'var-groups', name: '📁 Variable Groups', endpoints: [
+        {
+          id: 'vg-list', method: 'GET', path: '/api/variable-groups', auth: true,
+          summary: 'List groups for a workspace',
+          description: 'Returns all variable groups that apply to the given workspace (global groups + workspace-scoped groups).',
+          pathParams: [],
+          queryParams: [{name:'workspace_id', desc:'Workspace ID to filter by', example:'abc123'}],
+          body: null,
+          responses: [ {code:200, desc:'Array of variable group objects'} ],
+        },
+        {
+          id: 'vg-list-all', method: 'GET', path: '/api/variable-groups/all', auth: true,
+          summary: 'List all variable groups',
+          description: 'Returns every variable group regardless of scope.',
+          pathParams: [], queryParams: [], body: null,
+          responses: [ {code:200, desc:'Array of group objects'} ],
+        },
+        {
+          id: 'vg-create', method: 'POST', path: '/api/variable-groups', auth: true,
+          summary: 'Create a variable group',
+          description: 'Creates a new named group. Set workspace_ids to ["*"] for global scope, or list specific workspace IDs.',
+          pathParams: [], queryParams: [],
+          body: { desc:'name, description, workspace_ids, variables array.', example:{name:'prod-aws',description:'AWS production creds',workspace_ids:['*'],variables:[{key:'AWS_DEFAULT_REGION',value:'us-east-1',type:'env',sensitive:false}]} },
+          responses: [ {code:200, desc:'{ok:true, id}'} ],
+        },
+        {
+          id: 'vg-get', method: 'GET', path: '/api/variable-groups/{group_id}', auth: true,
+          summary: 'Get a single variable group',
+          pathParams: [{name:'group_id', desc:'Group UUID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'Group object'}, {code:404, desc:'Not found'} ],
+        },
+        {
+          id: 'vg-update', method: 'PUT', path: '/api/variable-groups/{group_id}', auth: true,
+          summary: 'Update a variable group',
+          pathParams: [{name:'group_id', desc:'Group UUID', required:true}],
+          queryParams: [],
+          body: { desc:'Same schema as create.', example:{name:'prod-aws-v2',variables:[{key:'AWS_DEFAULT_REGION',value:'eu-west-1',type:'env',sensitive:false}]} },
+          responses: [ {code:200, desc:'{ok:true}'} ],
+        },
+        {
+          id: 'vg-delete', method: 'DELETE', path: '/api/variable-groups/{group_id}', auth: true,
+          summary: 'Delete a variable group',
+          pathParams: [{name:'group_id', desc:'Group UUID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{ok:true}'} ],
+        },
+        {
+          id: 'vg-sensitive-summary', method: 'GET', path: '/api/sensitive-vars-summary', auth: true,
+          summary: 'List all sensitive variables',
+          description: 'Returns every sensitive variable with its full path context (folder → workspace → group → variable). Used by the Remove Lock confirmation modal.',
+          pathParams: [], queryParams: [], body: null,
+          responses: [ {code:200, desc:'Array of {folder, workspace, group, variable}'} ],
+        },
+        {
+          id: 'vg-unsensitize', method: 'POST', path: '/api/variable-groups/unsensitize-all', auth: true,
+          summary: 'Decrypt all sensitive variables to plaintext',
+          description: 'Decrypts every sensitive variable across all groups and workspaces and stores them as plaintext. Used when removing the portal lock with the "preserve values" option.',
+          pathParams: [], queryParams: [], body: null,
+          responses: [ {code:200, desc:'{ok:true}'} ],
+        },
+      ]},
+
+      /* ── Git ────────────────────────────────────────────────────── */
+      { id: 'git', name: '🌿 Git Integration', endpoints: [
+        {
+          id: 'git-refs', method: 'GET', path: '/api/workspace/{workspace_id}/git/refs', auth: false,
+          summary: 'List branches, tags and current HEAD',
+          description: 'Returns all local and remote branches (with a remote_only flag for branches not yet checked out locally), all tags, and the current HEAD ref.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{branches:[{name,local,remote,remote_only}], tags:[...], current:{...}}'} ],
+        },
+        {
+          id: 'git-checkout', method: 'POST', path: '/api/workspace/{workspace_id}/git/checkout', auth: true,
+          summary: 'Checkout a branch or tag',
+          description: 'Runs git checkout for the specified ref. If remote_only=true, git fetch origin is run first so git DWIM can create a local tracking branch.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [],
+          body: { desc:'ref: branch or tag name. remote_only: true = fetch before checkout.', example:{ref:'feature/new-vpc', remote_only:true} },
+          responses: [ {code:200, desc:'{ok:bool, output:string}'}, {code:400, desc:'ref is required or not a git repo'} ],
+        },
+        {
+          id: 'git-fetch', method: 'POST', path: '/api/workspace/{workspace_id}/git/fetch', auth: true,
+          summary: 'git fetch --all --prune',
+          description: 'Refreshes all remote refs and prunes deleted remote branches without switching branches.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{ok:bool, output:string}'} ],
+        },
+        {
+          id: 'git-pull', method: 'POST', path: '/api/workspace/{workspace_id}/git-pull', auth: true,
+          summary: 'git pull',
+          description: 'Runs git pull on the workspace path.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{ok:bool, output:string}'} ],
+        },
+      ]},
+
+      /* ── Sentinel ───────────────────────────────────────────────── */
+      { id: 'sentinel', name: '🛡️ Sentinel Policy', endpoints: [
+        {
+          id: 'sentinel-global-cfg', method: 'GET', path: '/api/sentinel/config', auth: false,
+          summary: 'Global Sentinel configuration',
+          description: 'Returns global Sentinel config: binary availability, policies path, enforcement flags, and discovered policy sets.',
+          pathParams: [], queryParams: [], body: null,
+          responses: [ {code:200, desc:'{available, cli_path, global_policies, enforce_on_plan, enforce_on_apply, global_policy_sets}'} ],
+        },
+        {
+          id: 'sentinel-ws-get', method: 'GET', path: '/api/workspace/{workspace_id}/sentinel/config', auth: false,
+          summary: 'Workspace Sentinel config',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{extra_policies, extra_policy_sets, sentinel_enforce_on_apply}'} ],
+        },
+        {
+          id: 'sentinel-ws-set', method: 'POST', path: '/api/workspace/{workspace_id}/sentinel/config', auth: true,
+          summary: 'Save workspace Sentinel config',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [],
+          body: { desc:'extra_policies: path to extra policy sets dir. active_global_sets / active_extra_sets: optional list of set names to restrict. sentinel_enforce_on_apply: bool.', example:{extra_policies:'/opt/my-policies', sentinel_enforce_on_apply:true} },
+          responses: [ {code:200, desc:'{ok:true, extra_policies}'} ],
+        },
+        {
+          id: 'sentinel-run', method: 'POST', path: '/api/workspace/{workspace_id}/sentinel/run', auth: true,
+          summary: 'Run Sentinel check',
+          description: 'Evaluates all configured policies against the latest plan JSON. If no cached plan exists, terraform plan is run first.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{ok:true, result:{passed, policies:[...], log:[...]}}'}, {code:400, desc:'No policy sets configured or Sentinel not installed'} ],
+        },
+        {
+          id: 'sentinel-last', method: 'GET', path: '/api/workspace/{workspace_id}/sentinel/last-result', auth: false,
+          summary: 'Get last Sentinel result',
+          description: 'Returns the persisted result of the last Sentinel check for this workspace.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{ok:bool, result:{passed, ran_at, policies:[...]}|null}'} ],
+        },
+      ]},
+
+      /* ── Execution Statistics ───────────────────────────────────── */
+      { id: 'stats', name: '📊 Execution Statistics', endpoints: [
+        {
+          id: 'ws-stats-2', method: 'GET', path: '/api/workspace/{workspace_id}/stats', auth: false,
+          summary: 'Run history series (alias)',
+          description: 'See Workspaces → stats. Listed here for discoverability.',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{series:[...]}'} ],
+        },
+      ]},
+
+      /* ── Metrics Export ─────────────────────────────────────────── */
+      { id: 'metrics', name: '📡 Metrics Export', endpoints: [
+        {
+          id: 'metrics-global-get', method: 'GET', path: '/api/metrics-config', auth: true,
+          summary: 'Get global metrics configuration',
+          description: 'Returns the full metrics export configuration from tfg.conf (all backend fields).',
+          pathParams: [], queryParams: [], body: null,
+          responses: [ {code:200, desc:'Full metrics config object'} ],
+        },
+        {
+          id: 'metrics-global-post', method: 'POST', path: '/api/metrics-config', auth: true,
+          summary: 'Save global metrics configuration',
+          pathParams: [], queryParams: [],
+          body: { desc:'All fields are optional. backend: influxdb | prometheus | graphite.', example:{enabled:true,backend:'influxdb',prefix:'tgm',influxdb_url:'http://localhost:8086',influxdb_token:'tok',influxdb_org:'myorg',influxdb_bucket:'tgm'} },
+          responses: [ {code:200, desc:'{ok:true}'} ],
+        },
+        {
+          id: 'metrics-ws-get', method: 'GET', path: '/api/workspace/{workspace_id}/metrics-config', auth: false,
+          summary: 'Get per-workspace metrics opt-in flag',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{metrics_enabled: bool}'} ],
+        },
+        {
+          id: 'metrics-ws-post', method: 'POST', path: '/api/workspace/{workspace_id}/metrics-config', auth: true,
+          summary: 'Toggle per-workspace metrics export',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [],
+          body: { desc:'metrics_enabled: true to opt in, false to opt out.', example:{metrics_enabled:true} },
+          responses: [ {code:200, desc:'{ok:true, metrics_enabled}'} ],
+        },
+      ]},
+
+      /* ── Notification Channels ──────────────────────────────────── */
+      { id: 'notifications', name: '🔔 Notification Channels', endpoints: [
+        {
+          id: 'notif-all', method: 'GET', path: '/api/notification-channels/all', auth: true,
+          summary: 'List all notification channels',
+          pathParams: [], queryParams: [], body: null,
+          responses: [ {code:200, desc:'Array of channel objects'} ],
+        },
+        {
+          id: 'notif-list', method: 'GET', path: '/api/notification-channels', auth: true,
+          summary: 'List channels visible to a workspace',
+          description: 'Returns global channels plus channels scoped to the given workspace.',
+          pathParams: [],
+          queryParams: [{name:'workspace_id', desc:'Filter by workspace', example:'abc123'}],
+          body: null,
+          responses: [ {code:200, desc:'Array of channel objects'} ],
+        },
+        {
+          id: 'notif-create', method: 'POST', path: '/api/notification-channels', auth: true,
+          summary: 'Create a notification channel',
+          pathParams: [], queryParams: [],
+          body: { desc:'name, type (slack|teams|email|pagerduty|alertmanager), config object, workspace_ids, triggers (on_success, on_failure, on_sentinel_fail).', example:{name:'ops-slack',type:'slack',config:{webhook_url:'https://hooks.slack.com/…'},workspace_ids:['*'],triggers:{on_success:false,on_failure:true,on_sentinel_fail:true}} },
+          responses: [ {code:200, desc:'{ok:true, id}'} ],
+        },
+        {
+          id: 'notif-get', method: 'GET', path: '/api/notification-channels/{channel_id}', auth: true,
+          summary: 'Get a single channel',
+          pathParams: [{name:'channel_id', desc:'Channel UUID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'Channel object'}, {code:404, desc:'Not found'} ],
+        },
+        {
+          id: 'notif-update', method: 'PUT', path: '/api/notification-channels/{channel_id}', auth: true,
+          summary: 'Update a channel',
+          pathParams: [{name:'channel_id', desc:'Channel UUID', required:true}],
+          queryParams: [],
+          body: { desc:'Same schema as create.', example:{name:'ops-slack-v2',triggers:{on_failure:true,on_sentinel_fail:true}} },
+          responses: [ {code:200, desc:'{ok:true}'} ],
+        },
+        {
+          id: 'notif-delete', method: 'DELETE', path: '/api/notification-channels/{channel_id}', auth: true,
+          summary: 'Delete a channel',
+          pathParams: [{name:'channel_id', desc:'Channel UUID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'{ok:true}'} ],
+        },
+        {
+          id: 'notif-test', method: 'POST', path: '/api/notification-channels/{channel_id}/test', auth: true,
+          summary: 'Send a test notification',
+          description: 'Sends a synthetic test notification. Can also accept an unsaved channel payload in the body to test before saving.',
+          pathParams: [{name:'channel_id', desc:'Channel UUID (use "preview" for unsaved)', required:true}],
+          queryParams: [],
+          body: { desc:'Optional: full channel object to test without saving first.', example:{} },
+          responses: [ {code:200, desc:'{ok:bool, error?:string}'} ],
+        },
+        {
+          id: 'notif-ws-list', method: 'GET', path: '/api/workspace/{workspace_id}/notification-channels', auth: true,
+          summary: 'List channels assigned to a workspace',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [], body: null,
+          responses: [ {code:200, desc:'Array of channel objects'} ],
+        },
+        {
+          id: 'notif-ws-assign', method: 'POST', path: '/api/workspace/{workspace_id}/notification-channels/assign', auth: true,
+          summary: 'Assign a global channel to a workspace',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [],
+          body: { desc:'channel_id: UUID of the global channel to assign.', example:{channel_id:'uuid-here'} },
+          responses: [ {code:200, desc:'{ok:true}'} ],
+        },
+        {
+          id: 'notif-ws-unassign', method: 'POST', path: '/api/workspace/{workspace_id}/notification-channels/unassign', auth: true,
+          summary: 'Unassign a global channel from a workspace',
+          pathParams: [{name:'workspace_id', desc:'Workspace ID', required:true}],
+          queryParams: [],
+          body: { desc:'channel_id: UUID of the global channel to remove.', example:{channel_id:'uuid-here'} },
+          responses: [ {code:200, desc:'{ok:true}'} ],
+        },
+      ]},
+
+      /* ── Backend Configuration ──────────────────────────────────── */
+      { id: 'backend-config', name: '☁️ Backend Configuration', endpoints: [
+        {
+          id: 'bc-get', method: 'GET', path: '/api/backend-config', auth: true,
+          summary: 'Get current backend type and masked credentials',
+          description: 'Returns the backend type saved in tfg.conf and masked versions of all credential fields (sensitive values replaced with ••••••••). Returns an empty object if no backend has been saved via the UI.',
+          pathParams: [], queryParams: [], body: null,
+          responses: [ {code:200, desc:'{type, bucket, prefix, aws_region, aws_access_key_id, aws_secret_access_key: "••••••••", ...}'} ],
+        },
+        {
+          id: 'bc-save', method: 'POST', path: '/api/backend-config', auth: true,
+          summary: 'Save backend type and credentials',
+          description: 'Persists the backend configuration to tfg.conf [backend_credentials]. Sensitive fields are encrypted with the portal password. Omitting a sensitive field preserves the existing encrypted value.',
+          pathParams: [], queryParams: [],
+          body: { desc:'type: local | aws | gcp | azure. Include all fields for the selected type. Leave sensitive fields blank to keep existing encrypted value.', example:{type:'aws',bucket:'my-tgm-bucket',prefix:'',aws_region:'us-east-1',aws_access_key_id:'AKIA…',aws_secret_access_key:'mysecret',sts_role_arn:''} },
+          responses: [ {code:200, desc:'{ok:true}'}, {code:400, desc:'Portal lock required for cloud credentials'} ],
+        },
+        {
+          id: 'bc-test', method: 'POST', path: '/api/backend-config/test', auth: true,
+          summary: 'Test backend connectivity',
+          description: 'Performs a write-read-delete probe against the configured backend. Passing the •••• placeholder for a sensitive field reuses the encrypted value stored in tfg.conf.',
+          pathParams: [], queryParams: [],
+          body: { desc:'Same as save body — pass the full credentials you want to test.', example:{type:'aws',bucket:'my-tgm-bucket',aws_region:'us-east-1',aws_access_key_id:'AKIA…',aws_secret_access_key:'mysecret'} },
+          responses: [ {code:200, desc:'{ok:true, message}'}, {code:400, desc:'{ok:false, error}'} ],
+        },
+        {
+          id: 'bc-migrate', method: 'POST', path: '/api/backend-config/migrate', auth: true,
+          summary: 'Migrate data between backends',
+          description: 'Streams all TGM-managed objects from the source backend to the destination backend. Returns the count of migrated objects.',
+          pathParams: [], queryParams: [],
+          body: { desc:'source_type + source_creds (source backend), dest_type + dest_creds (destination backend).', example:{source_type:'local',source_creds:{local_path:'./TERRAFORM_GRAPHICAL_BACKEND'},dest_type:'aws',dest_creds:{bucket:'my-tgm-bucket',aws_region:'us-east-1',aws_access_key_id:'AKIA…',aws_secret_access_key:'mysecret'}} },
+          responses: [ {code:200, desc:'{ok:true, migrated: N}'}, {code:400, desc:'{ok:false, error}'} ],
+        },
+        {
+          id: 'bc-delete', method: 'POST', path: '/api/backend-config/delete-source', auth: true,
+          summary: 'Delete all TGM data from a backend',
+          description: 'Permanently deletes all TGM-managed keys from the specified backend. Intended for post-migration cleanup.',
+          pathParams: [], queryParams: [],
+          body: { desc:'backend_type + creds of the backend to clean.', example:{backend_type:'local',creds:{local_path:'./TERRAFORM_GRAPHICAL_BACKEND'}} },
+          responses: [ {code:200, desc:'{ok:true, deleted: N}'}, {code:400, desc:'{ok:false, error}'} ],
+        },
+      ]},
+
+      /* ── Authentication ─────────────────────────────────────────── */
+      { id: 'auth', name: '🔐 Authentication', endpoints: [
+        {
+          id: 'auth-token', method: 'GET', path: '/api/settings/api-token', auth: true,
+          summary: 'Get Bearer API token',
+          description: 'Returns a stable HMAC-SHA256 Bearer token derived from the current portal password hash and the app secret key. The token changes automatically when the password changes. Requires an authenticated browser session.',
+          pathParams: [], queryParams: [], body: null,
+          responses: [ {code:200, desc:'{token: "sha256hex"}'}, {code:404, desc:'Portal lock not enabled'} ],
+        },
+      ]},
+
+    ],
+
+    /* ── helpers ────────────────────────────────────────────────────── */
+    init() {
+      // Open all groups by default
+      this.openGroups = this.groups.map(g => g.id);
+      // Pre-initialise all tryState keys so Alpine v3 tracks them reactively
+      this.groups.forEach(g => g.endpoints.forEach(ep => {
+        this.tryState[ep.id + '_loading'] = false;
+        this.tryState[ep.id + '_resp']    = null;
+        this.tryState[ep.id + '_status']  = null;
+        this.tryState[ep.id + '_url']     = '';
+      }));
+    },
+
+    visibleGroups() {
+      const q = this.filter.toLowerCase();
+      const mf = this.activeMethodFilters;
+      return this.groups.filter(g => {
+        const eps = this.visibleEndpoints(g);
+        return eps.length > 0;
+      });
+    },
+
+    visibleEndpoints(group) {
+      const q = this.filter.toLowerCase();
+      const mf = this.activeMethodFilters;
+      return group.endpoints.filter(ep => {
+        const methodOk = mf.length === 0 || mf.includes(ep.method);
+        const textOk = !q ||
+          ep.path.toLowerCase().includes(q) ||
+          ep.summary.toLowerCase().includes(q) ||
+          (ep.description || '').toLowerCase().includes(q);
+        return methodOk && textOk;
+      });
+    },
+
+    toggleGroup(id) {
+      const idx = this.openGroups.indexOf(id);
+      if (idx >= 0) this.openGroups.splice(idx, 1);
+      else this.openGroups.push(id);
+    },
+
+    toggleEndpoint(id) {
+      const idx = this.openEndpoints.indexOf(id);
+      if (idx >= 0) this.openEndpoints.splice(idx, 1);
+      else this.openEndpoints.push(id);
+    },
+
+    collapseAll() { this.openGroups = []; this.openEndpoints = []; },
+    expandAll() { this.openGroups = this.groups.map(g => g.id); },
+
+    toggleMethod(m) {
+      const idx = this.activeMethodFilters.indexOf(m);
+      if (idx >= 0) this.activeMethodFilters.splice(idx, 1);
+      else this.activeMethodFilters.push(m);
+    },
+
+    methodBadgeActive(m) {
+      const map = { GET:'method-get', POST:'method-post', PUT:'method-put', DELETE:'method-delete' };
+      return map[m] || 'bg-gray-200 text-gray-700 border-gray-300';
+    },
+
+    formatPath(path) {
+      return path.replace(/\{([^}]+)\}/g, '<span class="path-param">{$1}</span>');
+    },
+
+    setExampleBody(ep) {
+      if (ep.body && ep.body.example) {
+        this.tryState[ep.id + '_body'] = JSON.stringify(ep.body.example, null, 2);
+      }
+    },
+
+    buildUrl(ep) {
+      let path = ep.path;
+      if (ep.pathParams) {
+        for (const p of ep.pathParams) {
+          const val = (this.tryState[ep.id + '_param_' + p.name] || '').trim();
+          if (val) path = path.replace('{' + p.name + '}', encodeURIComponent(val));
+        }
+      }
+      const qp = [];
+      if (ep.queryParams) {
+        for (const p of ep.queryParams) {
+          const val = (this.tryState[ep.id + '_query_' + p.name] || '').trim();
+          if (val) qp.push(encodeURIComponent(p.name) + '=' + encodeURIComponent(val));
+        }
+      }
+      if (qp.length) path += '?' + qp.join('&');
+      return path;
+    },
+
+    async execute(ep) {
+      const url = this.buildUrl(ep);
+      this.tryState[ep.id + '_loading'] = true;
+      this.tryState[ep.id + '_url'] = ep.method + ' ' + url;
+      this.tryState[ep.id + '_resp'] = null;
+
+      const headers = { 'Content-Type': 'application/json' };
+      const tok = (this.globalToken || this.apiToken || '').trim();
+      if (tok) headers['Authorization'] = 'Bearer ' + tok;
+
+      let body = undefined;
+      if (ep.method !== 'GET' && ep.method !== 'DELETE') {
+        const raw = (this.tryState[ep.id + '_body'] || '').trim();
+        if (raw) {
+          try { JSON.parse(raw); body = raw; }
+          catch { body = '{}'; }
+        } else {
+          body = '{}';
+        }
+      }
+
+      try {
+        const res = await fetch(url, {
+          method: ep.method,
+          headers,
+          body,
+          credentials: 'same-origin',
+        });
+        let text = await res.text();
+        try { text = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+        this.tryState[ep.id + '_status'] = res.status;
+        this.tryState[ep.id + '_resp'] = text;
+      } catch (err) {
+        this.tryState[ep.id + '_status'] = 0;
+        this.tryState[ep.id + '_resp'] = 'Network error: ' + err.message;
+      } finally {
+        this.tryState[ep.id + '_loading'] = false;
+      }
+    },
+
+    async fetchToken() {
+      this.tokenLoading = true;
+      this.tokenError = '';
+      try {
+        const res = await fetch('/api/settings/api-token', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (data.token) {
+          this.apiToken = data.token;
+          this.globalToken = data.token;
+        } else {
+          this.tokenError = data.error || 'Could not retrieve token.';
+        }
+      } catch (e) {
+        this.tokenError = 'Network error: ' + e.message;
+      } finally {
+        this.tokenLoading = false;
+      }
+    },
+
+    copyToken() {
+      navigator.clipboard.writeText(this.apiToken).then(() => {
+        this.tokenCopied = true;
+        setTimeout(() => this.tokenCopied = false, 2000);
+      });
+    },
+
+    copyResponse(epId) {
+      const text = this.tryState[epId + '_resp'];
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        this.resCopied[epId] = true;
+        setTimeout(() => { this.resCopied[epId] = false; }, 2000);
+      });
+    },
+  };
+}
+</script>
+{% endblock %}

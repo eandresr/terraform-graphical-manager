@@ -2,7 +2,7 @@
      This partial is included in workspace.html and controlled by Alpine.js
      via the `modalOpen`, `modalCommand`, and `modalEnvVars` data properties.
 -->
-<div x-show="modalOpen"
+<div x-show="modalOpen" x-cloak
      x-transition:enter="transition ease-out duration-200"
      x-transition:enter-start="opacity-0"
      x-transition:enter-end="opacity-100"

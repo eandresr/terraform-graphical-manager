@@ -103,3 +103,53 @@ enforce_on_plan = false
 # apply from proceeding.  Requires enforce_on_plan = true.
 # Set to 'true' to enable.
 enforce_on_apply = false
+
+# ──────────────────────────────────────────────────────────────
+# Metrics Export
+# ──────────────────────────────────────────────────────────────
+[metrics]
+
+# Set to 'true' to enable metrics export globally.
+enabled = false
+
+# Target backend: influxdb | prometheus | graphite
+# Leave blank to disable.
+backend =
+
+# Common prefix applied to all metric names / measurements.
+prefix = tgm
+
+# ── InfluxDB v2 ────────────────────────────────────────────────
+# influxdb_url      = http://localhost:8086
+# influxdb_token    = my-influxdb-token
+# influxdb_org      = my-org
+# influxdb_bucket   = tgm
+# influxdb_verify_ssl = true
+
+influxdb_url =
+influxdb_token =
+influxdb_org =
+influxdb_bucket = tgm
+influxdb_verify_ssl = true
+
+# ── Prometheus Pushgateway ─────────────────────────────────────
+# prometheus_url      = http://localhost:9091
+# prometheus_job      = tgm
+# prometheus_username =  (optional, for basic auth)
+# prometheus_password =  (optional)
+# prometheus_verify_ssl = true
+
+prometheus_url =
+prometheus_job = tgm
+prometheus_username =
+prometheus_password =
+prometheus_verify_ssl = true
+
+# ── Graphite (plaintext) ───────────────────────────────────────
+# graphite_host     = localhost
+# graphite_port     = 2003
+# graphite_protocol = tcp   # or udp
+
+graphite_host =
+graphite_port = 2003
+graphite_protocol = tcp

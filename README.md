@@ -12,6 +12,10 @@
     <a href="#-variable-groups">Variable Groups</a> ·
     <a href="#-workspace-variables">Workspace Variables</a> ·
     <a href="#-portal-security">Portal Security</a> ·
+    <a href="#-metrics-export">Metrics Export</a> ·
+    <a href="#-notification-channels">Notifications</a> ·
+    <a href="#%EF%B8%8F-backend-configuration-ui">Backend Config UI</a> ·
+    <a href="#-api-management-panel">API Management</a> ·
     <a href="#-rest-api">REST API</a> ·
     <a href="#-testing--linting">Testing</a> ·
     <a href="#-security">Security</a>
@@ -40,12 +44,17 @@ No cloud account required. No authentication. No internet needed. Runs entirely 
 | **Git integration** | Branch / tag / release selector with search · Local & remote ref listing · One-click checkout (fetches remote branches automatically) · `git fetch` button · Optional `git pull` before each run · PAT token resolution (env var → workspace var → group var) · Run labels showing git ref and pull status |
 | **Version management** | Multiple local Terraform binaries · dot (`1.14.8`) or underscore (`1_14_8`) folder names · Per-workspace version pin · Per-run override |
 | **Workspace discovery** | Recursive `.tf` scanner · Group folders rendered as collapsible tree · Sidebar search filter · Subdirectories of a workspace are never treated as separate workspaces |
-| **Variable Groups** | Named sets of Terraform/env variables applied to one or more workspaces · global or workspace-scoped · Sidebar panel with create/edit/delete + "Used in" workspace viewer |
+| **Variable Groups** | Named sets of Terraform/env variables applied to one or more workspaces · global or workspace-scoped · Dedicated **sidebar panel** (accessible from any page) with create/edit/delete + "Used in" workspace viewer |
 | **Workspace Variables** | Individual key-value variables scoped to a single workspace · Stored in `workspace_config.json` · Injected on every run |
 | **Portal Security** | Optional password lock · Fernet-based encryption of sensitive variable values · Auto re-encryption when password changes · Safe "remove lock" modal with option to decrypt values to plaintext |
 | **Settings UI** | Visual panel to edit all `tfg.conf` settings · Backend checklist · Site name customization |
 | **Storage backends** | Local filesystem · AWS S3 · GCP Cloud Storage · Azure Blob Storage |
 | **Credential isolation** | Each execution runs with its own isolated environment — no credential leakage |
+| **Execution statistics** | Per-workspace run history charts (duration trend, resource-change counts) rendered with Chart.js in the Overview tab |
+| **Metrics export** | Push execution metrics to InfluxDB v2, Prometheus Pushgateway, or Graphite after every run · Per-workspace opt-in toggle · Configurable prefix |
+| **Notification channels** | Alert Slack, Microsoft Teams, Email/SMTP, PagerDuty, or Prometheus Alertmanager when runs finish · Global or workspace-scoped channels · Dedicated **sidebar panel** for global channel management · Configurable triggers (success / failure / Sentinel fail) · Customisable prefix and body templates with variable substitution |
+| **Backend Config UI** | Configure AWS S3, GCP Cloud Storage, Azure Blob Storage, or local backend directly from Settings · Credentials encrypted at rest (Fernet) · Connectivity test with write/read/delete probe · AWS STS assume-role support · **Manual diff+migrate panel**: compare local vs cloud object counts and migrate in one click · One-click source data deletion after migration |
+| **API Management Panel** | Interactive REST API documentation and live client at `/api-docs` · Swagger-style colour-coded endpoint cards (GET / POST / PUT / DELETE) · Live try-it panel with path/query/body inputs · Authentication section with Bearer-token auto-retrieval when portal lock is enabled · Filter by method or text · Response viewer with copy button |
 
 ---
 
@@ -318,6 +327,54 @@ workspaces/
 
 ---
 
+### ⚙️ Configuring via the Settings UI
+
+Instead of setting environment variables, you can configure and manage the storage backend entirely from **Settings → Storage Backend** in the TGM web interface.
+
+#### How it works
+
+1. Open **Settings → Storage Backend**.
+2. Select the backend type (Local / AWS S3 / GCP Cloud Storage / Azure).
+3. Fill in the connection details (bucket/container, region, credentials, optional prefix, etc.).
+4. Click **Test connectivity** — TGM performs a write-read-delete probe to verify access.
+5. Click **Save backend config** to persist the settings.
+
+Credentials are encrypted at rest using Fernet (same algorithm as variable groups) and stored in the `[backend_credentials]` section of `tfg.conf`.
+
+> **Priority rule:** if `TERRAFORM_GRAPHICAL_BACKEND` is set as an environment variable it takes precedence over the UI-saved configuration. The Settings page displays a warning badge when an env-var override is active.
+
+#### AWS — STS assume-role support
+
+Fill in the **STS role ARN** field to have TGM call `sts:AssumeRole` before every operation. The temporary session credentials are injected automatically and never stored.
+
+#### Backend resolution order
+
+```
+TERRAFORM_GRAPHICAL_BACKEND env var
+        ↓  (if unset)
+[backend_credentials].type in tfg.conf  (saved via Settings UI)
+        ↓  (if absent)
+local  (default)
+```
+
+#### Data migration
+
+TGM provides two ways to migrate data between storage backends:
+
+**Automatic migration modal** — when you switch to a different backend type and save, TGM detects existing data in the current backend and opens a confirmation modal offering to copy the data.
+
+**Manual "Migrate local data → cloud" panel** — a permanent section in **Settings → Storage Backend**, visible whenever a cloud backend is configured. This panel lets you:
+
+1. **Load diff** — compares object counts between the local backend and the configured cloud backend, showing how many variable groups, notification channels, and execution records exist **only in local** (and haven't been migrated yet). Items missing from the destination are listed by name.
+2. **Migrate now** — copies all objects that exist locally but not in the cloud backend. Progress and the final count are shown inline.
+3. **Delete local source data** — appears after a successful migration with a confirmation prompt, allowing you to clean up the local storage once data is safely on the cloud backend.
+
+All migration operations exclude binary plan artefacts (`.binary` files) which can be regenerated by running `plan` again; JSON records, logs, and configuration files are always copied.
+
+> A portal password must be set (Settings → Portal Security) before configuring credentials for cloud backends. Credentials are encrypted using the same key as sensitive variable values.
+
+---
+
 ## 🔧 Terraform Version Management
 
 TGM lets you maintain multiple local Terraform binaries and pick the right one per workspace or per run.
@@ -407,12 +464,14 @@ Variable Groups are named, reusable sets of Terraform and environment variables 
 
 ### Accessing Variable Groups
 
-The **"Variable Groups"** button in the sidebar (above Dashboard and Settings) opens a full-screen side panel listing all groups. From there you can:
+The **Variable Groups** entry in the sidebar (visible from every page, below the workspace list) opens the dedicated Variable Groups management page. From there you can:
 
 - **Create** a new group (name, description, scope, variables)
 - **Edit** an existing group — rename, change scope, add/remove/modify variables
 - **Delete** a group
 - **View which workspaces use it** — the "Used in" button (visible when a group is expanded) shows a modal with every workspace the group is assigned to, with a direct link to open each workspace
+
+Variable Groups can also be managed per-workspace from the **Variables** tab → **Variable Groups** sub-tab inside each workspace detail view.
 
 ### Variable types
 
@@ -597,7 +656,177 @@ Then `sentinel apply -config=run.hcl <policy>.sentinel` is invoked for each poli
 
 ---
 
-## �🔌 REST API
+## 📊 Execution Statistics
+
+Every workspace Overview tab shows a **Run History** card with two Chart.js line charts:
+
+| Chart | What it shows |
+|---|---|
+| **Duration trend** | Execution time (seconds) per run, chronologically |
+| **Resource changes** | Count of `create`, `update`, and `delete` actions per plan |
+
+The data is fetched from `GET /api/workspace/{id}/stats` and rendered client-side with Chart.js.
+A **Refresh** button reloads the series without leaving the tab.
+
+---
+
+## 📡 Metrics Export
+
+TGM can push execution metrics to an external time-series system after every run.
+
+### Supported backends
+
+| Backend | Protocol |
+|---|---|
+| **InfluxDB v2** | HTTP line protocol (`POST /api/v2/write`) |
+| **Prometheus Pushgateway** | Text exposition format (`POST /metrics/job/{job}`) |
+| **Graphite** | Plaintext TCP/UDP socket |
+
+### Configuring metrics export
+
+Go to **Settings → Metrics Export** in the UI and fill in the relevant fields:
+
+| Field | Description |
+|---|---|
+| Backend | `influxdb` \| `prometheus` \| `graphite` |
+| URL / Host | Target endpoint or hostname |
+| Token / Auth | Bearer token (InfluxDB), basic auth (Prometheus) |
+| Org / Bucket | InfluxDB v2 organisation and bucket |
+| Job name | Prometheus Pushgateway job label |
+| Port | Graphite plaintext port (default `2003`) |
+| Metric prefix | Dot-separated prefix prepended to every metric name |
+| Verify SSL | Toggle certificate verification |
+
+### Per-workspace opt-in
+
+Each workspace has an **Enable Metrics Export** toggle in the Overview tab.
+When disabled, that workspace's executions are silently skipped by the exporter.
+
+### Metrics pushed per run
+
+| Metric name (relative to prefix) | Type | Description |
+|---|---|---|
+| `execution.duration_seconds` | gauge | Wall-clock execution time |
+| `execution.resources.add` | gauge | Resources to be created |
+| `execution.resources.change` | gauge | Resources to be updated |
+| `execution.resources.destroy` | gauge | Resources to be destroyed |
+| `execution.status` | label/tag | `completed` \| `failed` \| `canceled` |
+
+All metrics are tagged/labelled with `workspace_id`, `workspace_name`, and `command`.
+
+---
+
+## 🔔 Notification Channels
+
+TGM can send alerts to external services when a Terraform execution finishes.
+
+### Supported integrations
+
+| Type | Mechanism |
+|---|---|
+| **Slack** | Incoming Webhook — optional channel, username, and icon emoji override · or Bot Token (`chat.postMessage` API) |
+| **Microsoft Teams** | Incoming Webhook — MessageCard JSON with dynamic colour · or Microsoft Graph API (client credentials OAuth2) |
+| **Email / SMTP** | STARTTLS or SSL · optional authentication · multiple To addresses |
+| **PagerDuty** | Events API v2 — routing key, configurable severity, custom details payload |
+| **Prometheus Alertmanager** | `/api/v2/alerts` — open, Bearer-token, or HTTP Basic auth · configurable severity label · `generatorURL` support |
+
+### Channel scope
+
+| Scope | Behaviour |
+|---|---|
+| **Global** (`workspace_ids = ["*"]`) | Channel listens for events from every workspace |
+| **Workspace-specific** | Channel triggers only for the explicitly assigned workspaces |
+
+Global channels can be assigned to individual workspaces from the **Notifications** tab;
+workspace-specific channels are created and managed entirely within that workspace.
+
+### Trigger conditions
+
+| Trigger | When it fires |
+|---|---|
+| `on_success` | Execution finished with status `completed` |
+| `on_failure` | Execution finished with status `failed` |
+| `on_sentinel_fail` | Sentinel policy check reported a failure (regardless of run status) |
+
+Each channel has an independent list of triggers — a channel can receive only failures
+while another receives successes, for example.
+
+### Message templates
+
+Both the **prefix** and the **body** of every notification support variable substitution:
+
+| Variable | Value |
+|---|---|
+| `{workspace_name}` | Human-readable workspace folder name |
+| `{workspace_id}` | Internal workspace ID |
+| `{command}` | `plan` \| `apply` |
+| `{status}` | `completed` \| `failed` \| `canceled` |
+| `{duration}` | Execution wall-clock time in seconds |
+| `{timestamp}` | ISO-8601 finish timestamp |
+| `{terraform_version}` | Terraform binary version used for the run |
+| `{sentinel_status}` | `pass` \| `fail` \| `n/a` |
+| `{sentinel_summary}` | One-line Sentinel result summary |
+
+Default prefix: `[TGM] [{workspace_name}]`
+
+### Managing channels
+
+#### Global management from the sidebar
+
+The **Notification Channels** entry in the sidebar (visible from every page) opens the global channel management page where you can:
+
+- **View** all notification channels across all workspaces with their type, scope, and trigger badges
+- **Create** a new global channel directly from this page
+- **Edit** or **delete** any channel
+- **Test** any channel— sends a synthetic notification immediately
+
+#### Per-workspace management
+
+Open the **Notifications** tab in any workspace to:
+
+- **Create** a new workspace-scoped or global channel
+- **Edit** name, type, credentials, scope, triggers, and templates
+- **Test** — sends a synthetic test notification immediately
+- **Delete** a workspace-scoped channel, or **unassign** a global one
+- **Assign** any existing global channel to the current workspace
+
+---
+
+## 💻 API Management Panel
+
+TGM ships a built-in interactive API console at **`/api-docs`** — accessible via the
+**`</> API`** button in the top-right corner of every page (next to the GitHub link).
+
+### Features
+
+| Feature | Detail |
+|---|---|
+| Swagger-style layout | Grouped endpoint cards by domain (Workspaces, Executions, Git, Sentinel, etc.) |
+| Colour-coded methods | `GET` green · `POST` amber · `PUT` blue · `DELETE` red |
+| Path parameter inputs | Inline text fields for `{workspace_id}`, `{execution_id}`, etc. |
+| Query parameter inputs | Inline fields for optional/required query strings |
+| Request body editor | Textarea pre-filled with a working example via **Load example** |
+| Live **Send request** button | Fires the real request against the running TGM instance |
+| Response viewer | JSON-formatted response with status badge and **Copy** button |
+| Filter bar | Filter by text or by method badge (GET / POST / PUT / DELETE) |
+| Collapse / Expand all | Toggle all endpoint groups at once |
+
+### Authentication
+
+| Portal state | Behaviour |
+|---|---|
+| **Locked** (password set) | Auth banner shown. Click **Get Bearer token** to retrieve a stable HMAC-SHA256 token auto-filled into every try-it panel. Can also be pasted manually. |
+| **Unlocked** (no password) | Green “No authentication required” banner. All endpoints accept anonymous requests. |
+
+When the portal lock is active, API requests must include:
+```
+Authorization: Bearer <token>
+```
+The token is derived from the portal password hash and rotates automatically when the password changes.
+
+---
+
+## 🔌 REST API
 
 All UI features are powered by a JSON REST API. Base path: `/api/`
 
@@ -686,6 +915,44 @@ All UI features are powered by a JSON REST API. Base path: `/api/`
 | `GET` | `/settings` | Visual settings page |
 | `POST` | `/settings` | Save settings to `tfg.conf` |
 
+### Execution Statistics
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/workspace/{id}/stats` | Run history series for charts (`{series: [...]}`) |
+
+### Metrics Export
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/workspace/{id}/metrics-config` | Get per-workspace metrics-enabled flag |
+| `POST` | `/api/workspace/{id}/metrics-config` | Toggle per-workspace metrics export (`{metrics_enabled: bool}`) |
+
+### Notification Channels
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/notification-channels/all` | List all notification channels (no filter) |
+| `GET` | `/api/notification-channels?workspace_id={id}` | List channels visible to a workspace (global + workspace-scoped) |
+| `POST` | `/api/notification-channels` | Create a new channel |
+| `GET` | `/api/notification-channels/{channel_id}` | Get a single channel |
+| `PUT` | `/api/notification-channels/{channel_id}` | Update a channel |
+| `DELETE` | `/api/notification-channels/{channel_id}` | Delete a channel |
+| `POST` | `/api/notification-channels/{channel_id}/test` | Send a test notification (also accepts an unsaved channel payload in the body) |
+| `GET` | `/api/workspace/{id}/notification-channels` | List channels assigned to (or scoped to) a workspace |
+| `POST` | `/api/workspace/{id}/notification-channels/assign` | Assign a global channel to a workspace (`{channel_id}`) |
+| `POST` | `/api/workspace/{id}/notification-channels/unassign` | Remove a global channel from a workspace (`{channel_id}`) |
+
+### Backend Configuration
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/backend-config` | Get current backend type and masked credentials |
+| `POST` | `/api/backend-config` | Save backend type and credentials (sensitive fields encrypted with portal password) |
+| `POST` | `/api/backend-config/test` | Test connectivity to the specified backend (write-read-delete probe) |
+| `POST` | `/api/backend-config/migrate` | Migrate all data from one backend to another |
+| `POST` | `/api/backend-config/delete-source` | Delete all TGM-managed data from a backend (used after migration) |
+
 ---
 
 ## ⚡ Execution Queue
@@ -761,6 +1028,9 @@ terraform-graphical-manager/
 │   ├── plan_parser.py             ← plan.json resource_changes parser
 │   ├── state_parser.py            ← terraform state pull parser
 │   ├── version_manager.py         ← local Terraform binary discovery
+│   ├── metrics_exporter.py        ← InfluxDB / Prometheus / Graphite push
+│   ├── notification_manager.py    ← Slack / Teams / Email / PagerDuty dispatch
+│   ├── backend_config.py          ← Storage backend credential management (encrypt / test / migrate)
 │   │
 │   ├── storage/
 │   │   ├── __init__.py            ← backend factory (env-based selection)
@@ -773,7 +1043,8 @@ terraform-graphical-manager/
 │       ├── workspace_routes.py    ← UI pages (dashboard, workspace detail)
 │       ├── execution_routes.py    ← execution detail page
 │       ├── api_routes.py          ← JSON REST API
-│       └── settings_routes.py     ← Settings UI page
+│       ├── settings_routes.py     ← Settings UI page
+│       └── notification_routes.py ← Notification channels CRUD + test API
 │
 ├── templates/
 │   ├── base.html                  ← sidebar + topbar layout
@@ -788,10 +1059,18 @@ terraform-graphical-manager/
 │
 ├── static/
 │   ├── css/main.css
+│   ├── css/fonts.css              ← local web-font declarations (no CDN)
+│   ├── fonts/                     ← bundled Inter + JetBrains Mono font files
 │   ├── img/icon.png               ← application icon / favicon
 │   └── js/
 │       ├── main.js
-│       └── graph.js               ← D3.js force-directed graph renderer
+│       ├── graph.js               ← D3.js force-directed graph renderer
+│       └── vendors/               ← vendored JS bundles (fully offline-capable)
+│           ├── tailwind.cdn.js
+│           ├── alpine.min.js
+│           ├── socket.io.min.js
+│           ├── chart.umd.min.js
+│           └── d3.v7.min.js
 │
 ├── tests/
 │   ├── conftest.py                ← shared pytest fixtures (Flask test client)
@@ -818,16 +1097,20 @@ Browser (Alpine.js + TailwindCSS)
         │  HTTP + Socket.IO (real-time logs)
         ▼
 Flask Web Application
-├── workspace_routes   → dashboard, workspace detail pages
-├── execution_routes   → execution detail page
-├── api_routes         → JSON REST API (consumed by Alpine.js)
-└── settings_routes    → settings page (reads/writes tfg.conf)
+├── workspace_routes    → dashboard, workspace detail pages
+├── execution_routes    → execution detail page
+├── api_routes          → JSON REST API (consumed by Alpine.js)
+├── notification_routes → notification channel CRUD + test
+└── settings_routes     → settings page (reads/writes tfg.conf)
         │
-        ├── WorkspaceScanner    → recursive .tf file discovery
-        ├── TerraformRunner     → subprocess: init / plan / apply / state / graph / output
-        ├── ExecutionQueue      → thread pool (max_concurrent workers)
-        ├── VersionManager      → local binary discovery + resolution
-        └── StorageBackend      → local / S3 / GCS / Azure
+        ├── WorkspaceScanner     → recursive .tf file discovery
+        ├── TerraformRunner      → subprocess: init / plan / apply / state / graph / output
+        ├── ExecutionQueue       → thread pool (max_concurrent workers)
+        ├── VersionManager       → local binary discovery + resolution
+        ├── MetricsExporter      → InfluxDB / Prometheus / Graphite push after each run
+        ├── NotificationManager  → Slack / Teams / Email / PagerDuty dispatch after each run
+        ├── BackendConfig        → credential management (encrypt/test/migrate) for StorageBackend
+        └── StorageBackend       → local / S3 / GCS / Azure
                 │
                 ▼
         Terraform CLI (subprocess)   +   Storage (disk / cloud)

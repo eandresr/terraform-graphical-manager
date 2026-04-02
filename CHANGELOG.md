@@ -7,7 +7,274 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased] — 0.3.0
+## [1.2.0] — 2026-04-02
+
+### Added
+
+#### API Management Panel (`/api-docs`)
+- Renamed and elevated the existing interactive API reference to the **API Management Panel**
+  to better reflect its role as a full live client, not just documentation.
+- Accessible via the **`</> API`** button in the top-right topbar on every page.
+- All previously described features retained: Swagger-style grouped cards, colour-coded
+  methods, live try-it panels, Bearer-token auto-retrieval, filter bar, collapse/expand all.
+
+#### Variable Groups — dedicated sidebar page
+- **Variable Groups** is now a persistent, first-class entry in the sidebar navigation,
+  accessible from any page without opening a specific workspace.
+- The global management page lists all groups across all workspaces and allows
+  create / edit / delete / "Used in" directly from the sidebar shortcut.
+
+#### Notification Channels — dedicated sidebar page
+- **Notification Channels** is now a persistent entry in the sidebar navigation,
+  accessible from any page.
+- The global management page lists every channel (type badge, scope badge, trigger badges),
+  allows creating new global channels, editing, deleting, and testing any channel inline.
+- This complements the existing per-workspace Notifications tab (which continues to work
+  for workspace-scoped channel management and assignment).
+
+#### Manual "Migrate local data → cloud" panel in Settings
+- A permanent **Migrate local data → cloud** section is now visible inside
+  **Settings → Storage Backend** whenever a cloud backend (AWS / GCP / Azure) is configured.
+- **Load diff** button — calls the new `GET /api/backend-config/diff` endpoint to compare
+  object counts between the local backend and the configured cloud backend. The panel shows:
+  - Counts for variable groups, notification channels, and executions in each backend.
+  - Names of items that exist only in local storage (i.e. not yet migrated).
+- **Migrate now** button — posts to `POST /api/backend-config/migrate` with
+  `source_type: local` and copies all missing objects. Shows copied / skipped counts.
+- **Delete local source data** button — appears after a successful migration, with
+  confirmation, to clean up the local storage.
+- Binary plan artefacts (`.binary` files) are intentionally excluded — only JSON records,
+  logs, and configuration files are copied.
+- New REST endpoint: `GET /api/backend-config/diff` — returns `only_in_source` /
+  `only_in_dest` lists and counts for variable groups, notification channels, and
+  executions across both backends.
+
+#### Backend type selector product icons
+- The 4-button backend type selector in Settings now displays cloud provider product
+  images instead of generic SVG icons:
+  - AWS S3 → `static/img/aws-s3.png`
+  - GCP Cloud Storage → `static/img/google-bucket.png`
+  - Azure Blob Storage → `static/img/azure-blob.png`
+  - Local FS retains its original SVG icon.
+
+### Fixed
+
+#### Sensitive credential fields overwritten with encrypted mask on re-save
+- **Root cause**: `GET /api/backend-config` returns sensitive fields masked as `••••••••`.
+  The Settings form was pre-populating those fields with the mask on load, and
+  `POST /api/backend-config` was encrypting the literal `••••••••` string and persisting
+  it — silently replacing the real credential with an unusable encrypted placeholder.
+- **Backend fix** (`app/routes/api_routes.py`): `save_backend_config_api` now treats both
+  empty string and `••••••••` (8 bullet characters) as "keep existing encrypted value" —
+  the real credential in `tfg.conf` is never touched unless a different plaintext value
+  is explicitly typed.
+- **Frontend fix** (`templates/settings.html`): `init()` no longer populates sensitive
+  fields with the `••••••••` mask returned by the API — those fields load blank, preserving
+  the correct "leave blank to keep current" UX.
+- A new `savedSensitiveFields` array tracks which fields have an existing saved value so
+  that an info icon (ⓘ) tooltip can inform the user without adding text that breaks grid
+  layout.
+
+#### Layout shift in backend config sensitive field labels
+- The inline text `"✓ value saved — leave blank to keep"` added next to encrypted field
+  labels was causing the AWS Secret Key input to drop out of alignment with the Access Key
+  ID input in the two-column grid.
+- **Fix**: replaced the inline text with a compact green ⓘ icon; hovering reveals a
+  dark tooltip with the full explanation. No additional vertical space is consumed.
+  Applied to all three sensitive fields: AWS Secret Key, GCP Service Account JSON, and
+  Azure Client Secret.
+
+---
+
+## [1.1.0] — 2026-04-01
+
+### Added
+
+#### Offline-capable vendor assets
+- All previously CDN-fetched JavaScript libraries are now bundled locally under
+  `static/js/vendors/`, making TGM fully operational without internet access:
+  - **Tailwind CSS** play-CDN build (`tailwind.cdn.js`)
+  - **Alpine.js** (`alpine.min.js`)
+  - **Socket.IO client** (`socket.io.min.js`)
+  - **Chart.js** UMD bundle (`chart.umd.min.js`)
+  - **D3.js** v7 minified bundle (`d3.v7.min.js`)
+- Web fonts (Inter, JetBrains Mono) are served from `static/fonts/` with a
+  companion `static/css/fonts.css` — no Google Fonts requests are made at runtime.
+- All `<script src="…">` and font `@import` references in `base.html`, `login.html`,
+  `workspace.html`, and `graph_view.html` updated to point at the local paths.
+
+#### Storage Backend Configuration UI (`app/backend_config.py`)
+- New `app/backend_config.py` module — centralised credential management for every
+  supported storage backend without requiring environment variables.
+- **Visual configuration panel** in **Settings → Storage Backend**:
+  - 4-button type selector: Local / AWS S3 / GCP Cloud Storage / Azure.
+  - Per-type form panels with all required connection fields (bucket/container,
+    region/project, credentials, optional key prefix, etc.).
+  - Sensitive fields (AWS secret key, GCP service-account JSON, Azure client secret)
+    are displayed as password inputs and encrypted at rest.
+  - Env-var override warning badge: displayed when `TERRAFORM_GRAPHICAL_BACKEND` is
+    set in the process environment, indicating it takes precedence over saved config.
+  - **Test connectivity** button — performs a write-read-delete probe against the
+    configured backend and reports success or a descriptive error inline.
+  - **Save backend config** button — persists settings to `[backend_credentials]`
+    in `tfg.conf`.
+- **Encryption**: sensitive credential fields are encrypted with Fernet
+  (AES-128-CBC + HMAC-SHA256) using the portal password as key material — the same
+  scheme used for variable groups. Requires a portal password to be set before
+  configuring credentials for cloud backends.
+- **AWS STS assume-role**: an optional `sts_role_arn` field instructs TGM to call
+  `sts:AssumeRole` before every S3 operation. The temporary session credentials are
+  injected automatically and never stored.
+- **Data migration flow**:
+  1. Switching to a different backend type and saving opens a confirmation modal.
+  2. **Copy data** — streams every object from the source backend to the destination,
+     reporting the count on completion.
+  3. Optional **Delete source data** step with a second confirmation prompt, which
+     removes all TGM-managed data from the former backend.
+- **Backend resolution order** (updated):
+  `TERRAFORM_GRAPHICAL_BACKEND` env var → `[backend_credentials].type` in `tfg.conf`
+  → `local` (default).
+- **New REST API endpoints**:
+  - `GET  /api/backend-config` — returns current backend type and masked credentials.
+  - `POST /api/backend-config` — saves backend type and credentials (sensitive fields
+    encrypted; omitting a sensitive field preserves the existing encrypted value).
+  - `POST /api/backend-config/test` — connectivity probe.
+  - `POST /api/backend-config/migrate` — streams all data from source to destination backend.
+  - `POST /api/backend-config/delete-source` — deletes all TGM data from a backend.
+
+### Changed
+
+- **`pyproject.toml`** — version `1.0.0 → 1.1.0`.
+- **`app/storage/__init__.py`** — `get_backend()` resolves the backend type via
+  `_resolve_type()` (env var → tfg.conf saved type → local) instead of reading the
+  env var directly.
+- **`app/storage/aws_backend.py`** — constructor falls back to saved backend credentials
+  when AWS env vars are absent; `_execution_prefix` converted from `@staticmethod` to
+  instance method to respect the configured prefix; `list_executions` uses the prefix.
+- **`app/storage/gcp_backend.py`** — same pattern as the AWS backend: fallback to saved
+  credentials, instance `_execution_prefix`, prefix-aware `list_executions`.
+- **`app/storage/azure_backend.py`** — same pattern; supports both legacy connection-string
+  and new service-principal credential sets side-by-side.
+- **`app/routes/settings_routes.py`** — backend credentials are re-encrypted in the same
+  password-change pass that already re-encrypts variable groups and notification channels.
+- **`templates/settings.html`** — backend section completely rewritten using an Alpine.js
+  component (`backendConfigSection()`); legacy static env-var instructions replaced by the
+  new interactive configuration form.
+
+#### Interactive API Reference UI (`/api-docs`)
+- New page **`/api-docs`** — Swagger-style interactive REST API documentation.
+- **`</> API`** button added to the top-right topbar on every page, next to the GitHub link.
+- **Endpoint groups**: Workspaces, Executions, Workspace Execution Lock, Terraform Versions,
+  Workspace Variables, Variable Groups, Git Integration, Sentinel Policy, Execution Statistics,
+  Metrics Export, Notification Channels, Backend Configuration, Authentication.
+- **Per-endpoint try-it panels**: inline inputs for path parameters, query parameters,
+  and JSON request body (with a **Load example** button to pre-fill a working payload).
+- **Live Send request**: fires the real HTTP request against the running TGM instance from
+  the browser; formats the JSON response with syntax highlighting and a status code badge.
+- **Copy response** button to copy the raw response body to the clipboard.
+- **Auth banner**:
+  - When portal lock is enabled: amber banner with a **Get Bearer token** button that calls
+    `GET /api/settings/api-token` and auto-fills the token into all try-it panels.
+  - When portal lock is disabled: green "No authentication required" banner.
+- Token input field visible in every try-it panel when portal lock is active.
+- **Filter bar**: filter endpoints by text (path, summary, description) and/or method badge.
+- **Collapse / Expand all** controls.
+- Implemented entirely with the vendored Alpine.js + Tailwind (no extra dependencies).
+- New Flask route `GET /api-docs` registered in `workspace_routes.py`.
+- New template `templates/api_docs.html`.
+
+---
+
+## [1.0.0] — 2026-03-31
+
+First stable/production release. This version graduates TGM from beta (`0.x`) to a fully
+featured local Terraform Cloud alternative with observability (execution charts, metrics
+export) and alerting (notification channels) baked in.
+
+### Added
+
+#### Execution Statistics Charts
+- Per-workspace **Run History** card in the Overview tab with two Chart.js line charts:
+  - **Duration trend** — wall-clock execution time (seconds) per run, chronologically.
+  - **Resource changes** — create / update / destroy counts per plan run.
+- `GET /api/workspace/{id}/stats` — returns the series data consumed by the charts.
+- **Refresh** button to reload the series without leaving the tab.
+
+#### Metrics Export (`app/metrics_exporter.py`)
+- Push execution metrics to an external time-series system after every run.
+- Three supported backends:
+  - **InfluxDB v2** — HTTP line protocol (`POST /api/v2/write`).
+  - **Prometheus Pushgateway** — text exposition format (`POST /metrics/job/{job}`).
+  - **Graphite** — plaintext TCP/UDP socket.
+- Metrics pushed per run: `execution.duration_seconds`, `execution.resources.add`,
+  `execution.resources.change`, `execution.resources.destroy`, `execution.status`.
+- All metrics tagged/labelled with `workspace_id`, `workspace_name`, and `command`.
+- Configurable: metric prefix, SSL verify toggle, per-backend credentials.
+- Per-workspace opt-in toggle in the Overview tab card.
+- New REST API endpoints:
+  - `GET  /api/workspace/{id}/metrics-config` — read enabled flag.
+  - `POST /api/workspace/{id}/metrics-config` — toggle enabled (`{metrics_enabled: bool}`).
+- Full configuration panel in **Settings → Metrics Export**.
+
+#### Notification Channels (`app/notification_manager.py`, `app/routes/notification_routes.py`)
+- Alert external services when Terraform executions finish.
+- Four integration types:
+  - **Slack** — Incoming Webhook, optional channel / username / icon emoji override.
+  - **Microsoft Teams** — Incoming Webhook, MessageCard JSON, dynamic colour (red = failed,
+    green = completed), SSL verify toggle.
+  - **Email / SMTP** — STARTTLS or SSL, optional authentication, multiple To addresses.
+  - **PagerDuty** — Events API v2, routing key, configurable severity
+    (critical / error / warning / info), custom_details payload, optional base URL for
+    on-premises deployments.
+- Channel scope: **global** (`workspace_ids = ["*"]`) or **workspace-specific**.
+- Trigger conditions per channel: `on_success`, `on_failure`, `on_sentinel_fail`.
+- Customisable **prefix template** and **body template** with variable substitution:
+  `{workspace_name}`, `{workspace_id}`, `{command}`, `{status}`, `{duration}`,
+  `{timestamp}`, `{terraform_version}`, `{sentinel_status}`, `{sentinel_summary}`.
+- Default prefix: `[TGM] [{workspace_name}]`.
+- **Notifications tab** in every workspace detail view:
+  - Channel cards showing type icon, scope badge, trigger badges, prefix preview, and
+    enable/disable state.
+  - Create / Edit modal with per-type dynamic config fields.
+  - **Test** button — sends a synthetic notification immediately; shows a timed
+    success/error pill inline without reloading the page.
+  - Delete workspace-scoped channels; unassign global channels.
+  - **Assign a Global Channel** panel to link pre-existing global channels to the
+    current workspace.
+- Storage: one JSON file per channel under `notification_channels/` in the local
+  backend; cloud backends fall back gracefully (channels not persisted, no crash).
+- New REST API endpoints:
+  - `GET  /api/notification-channels/all`
+  - `GET  /api/notification-channels?workspace_id={id}`
+  - `POST /api/notification-channels`
+  - `GET|PUT|DELETE /api/notification-channels/{id}`
+  - `POST /api/notification-channels/{id}/test`
+  - `GET  /api/workspace/{id}/notification-channels`
+  - `POST /api/workspace/{id}/notification-channels/assign`
+  - `POST /api/workspace/{id}/notification-channels/unassign`
+
+### Changed
+
+- **`pyproject.toml`** — version `0.3.0 → 1.0.0`; classifier changed to
+  `5 - Production/Stable`.
+- **`app/execution_queue.py`** — metrics export and notification dispatch hooked in the
+  `finally` block of `_run_execution`; both are wrapped in `try/except Exception: pass`
+  so failures never affect execution lifecycle.
+- **`app/storage/local_backend.py`** — added `list/get/save/delete_notification_channel()`
+  methods following the same JSON-file-per-item pattern as variable groups.
+- **`app/app.py`** — registered `notification_bp` blueprint at `/api` prefix.
+- **`templates/workspace.html`** — added `Notifications` tab to the tab loop, full tab
+  panel, create/edit modal, Alpine state variables and methods, `loadNotifChannels()` call
+  in `switchTab()`.
+- **`templates/settings.html`** — added Metrics Export configuration panel (backend
+  selector radio buttons, per-backend sub-panels, prefix field, SSL toggles).
+- **`app/routes/settings_routes.py`** — added POST handling for all metrics export fields.
+- **`app/routes/api_routes.py`** — added `GET/POST /api/workspace/{id}/metrics-config`
+  endpoints.
+
+---
+
+## [0.3.0] — 2026-03-31
 
 > Branch: `feature/git-integration`
 
@@ -153,7 +420,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.3.0...HEAD
+[1.1.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/eandresr/terraform-graphical-manager/releases/tag/v0.1.0

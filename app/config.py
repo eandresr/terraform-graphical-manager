@@ -107,6 +107,103 @@ class Config:
         """PBKDF2 hash of the portal lock password; empty string means unlocked."""
         return self._parser.get("security", "password_hash", fallback="")
 
+    # ------------------------------------------------------------------
+    # Metrics export
+    # ------------------------------------------------------------------
+
+    @property
+    def metrics_backend(self) -> str:
+        """One of: '', 'influxdb', 'prometheus', 'graphite'."""
+        return self._parser.get("metrics", "backend", fallback="").strip().lower()
+
+    @property
+    def metrics_enabled(self) -> bool:
+        return self._parser.getboolean("metrics", "enabled", fallback=False)
+
+    @property
+    def metrics_prefix(self) -> str:
+        return self._parser.get("metrics", "prefix", fallback="tgm")
+
+    # InfluxDB
+    @property
+    def metrics_influxdb_url(self) -> str:
+        return self._parser.get("metrics", "influxdb_url", fallback="")
+
+    @property
+    def metrics_influxdb_token(self) -> str:
+        return self._parser.get("metrics", "influxdb_token", fallback="")
+
+    @property
+    def metrics_influxdb_org(self) -> str:
+        return self._parser.get("metrics", "influxdb_org", fallback="")
+
+    @property
+    def metrics_influxdb_bucket(self) -> str:
+        return self._parser.get("metrics", "influxdb_bucket", fallback="tgm")
+
+    @property
+    def metrics_influxdb_verify_ssl(self) -> bool:
+        return self._parser.getboolean("metrics", "influxdb_verify_ssl", fallback=True)
+
+    # Prometheus Pushgateway
+    @property
+    def metrics_prometheus_url(self) -> str:
+        return self._parser.get("metrics", "prometheus_url", fallback="")
+
+    @property
+    def metrics_prometheus_job(self) -> str:
+        return self._parser.get("metrics", "prometheus_job", fallback="tgm")
+
+    @property
+    def metrics_prometheus_username(self) -> str:
+        return self._parser.get("metrics", "prometheus_username", fallback="")
+
+    @property
+    def metrics_prometheus_password(self) -> str:
+        return self._parser.get("metrics", "prometheus_password", fallback="")
+
+    @property
+    def metrics_prometheus_verify_ssl(self) -> bool:
+        return self._parser.getboolean("metrics", "prometheus_verify_ssl", fallback=True)
+
+    # ------------------------------------------------------------------
+    # Run history retention
+    # ------------------------------------------------------------------
+
+    @property
+    def history_retention_mode(self) -> str:
+        """One of: 'none', 'count', 'days', 'size'."""
+        return self._parser.get("history", "retention_mode", fallback="none").strip().lower()
+
+    @property
+    def history_retention_count(self) -> int:
+        """Max number of runs to keep per workspace (retention_mode = count)."""
+        return self._parser.getint("history", "retention_count", fallback=50)
+
+    @property
+    def history_retention_days(self) -> int:
+        """Delete runs older than this many days (retention_mode = days)."""
+        return self._parser.getint("history", "retention_days", fallback=90)
+
+    @property
+    def history_retention_size_mb(self) -> int:
+        """Max total size in MB per workspace (retention_mode = size)."""
+        return self._parser.getint("history", "retention_size_mb", fallback=500)
+
+    # Graphite
+    @property
+    def metrics_graphite_host(self) -> str:
+        return self._parser.get("metrics", "graphite_host", fallback="")
+
+    @property
+    def metrics_graphite_port(self) -> int:
+        return self._parser.getint("metrics", "graphite_port", fallback=2003)
+
+    @property
+    def metrics_graphite_protocol(self) -> str:
+        """'tcp' or 'udp'."""
+        return self._parser.get("metrics", "graphite_protocol", fallback="tcp").strip().lower()
+
     def save(self, updates: dict) -> None:
         """
         Persist *updates* back to tfg.conf.

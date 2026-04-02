@@ -72,6 +72,7 @@ def create_app(config_path: str = None) -> Flask:
     execution_queue = ExecutionQueue(
         max_workers=config.max_concurrent_executions,
         socketio_instance=socketio,
+        flask_app=app,
     )
     execution_queue.start()
     app.config["EXECUTION_QUEUE"] = execution_queue
@@ -97,12 +98,14 @@ def create_app(config_path: str = None) -> Flask:
     from app.routes.api_routes import api_bp
     from app.routes.settings_routes import settings_bp
     from app.routes.auth_routes import auth_bp
+    from app.routes.notification_routes import notification_bp
 
     app.register_blueprint(workspace_bp)
     app.register_blueprint(execution_bp, url_prefix="/executions")
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(settings_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(notification_bp, url_prefix="/api")
 
     # ------------------------------------------------------------------
     # Portal lock — gate ALL routes when a password is configured
@@ -143,5 +146,15 @@ def create_app(config_path: str = None) -> Flask:
 
     # Initialize Socket.IO (threading mode for simplicity)
     socketio.init_app(app, cors_allowed_origins="*", async_mode="threading")
+
+    # Kick off background GitHub-module scan so the dashboard cache is warm.
+    # Runs in a daemon thread — will not block startup or shutdown.
+    from app.github_module_checker import scan_all_workspaces_background
+    scan_all_workspaces_background(config.repos_root)
+
+    # Seed the workspace last-state cache from storage so the dashboard shows
+    # correct "last run" badges even before any execution fires this session.
+    from app.workspace_state import seed_from_storage_background
+    seed_from_storage_background()
 
     return app
