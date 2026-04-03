@@ -60,6 +60,10 @@ BACKEND_FIELDS: Dict[str, list] = {
 
 # Config section where credentials are stored
 _SECTION = "backend_credentials"
+# Temporary section that holds the OLD backend credentials while migration is pending.
+# Written by save_backend_config_api() when the type changes, cleared by the
+# delete-source endpoint (or the next type change).
+_MIGRATION_SOURCE_SECTION = "backend_migration_source"
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +105,42 @@ def delete_backend_config(config) -> None:
     parser = config._parser
     if parser.has_section(_SECTION):
         parser.remove_section(_SECTION)
+        with open(config.config_path, "w", encoding="utf-8") as fh:
+            parser.write(fh)
+        parser.read(config.config_path)
+
+
+# ---------------------------------------------------------------------------
+# Migration-source stash  (old backend credentials kept while migration runs)
+# ---------------------------------------------------------------------------
+
+def get_migration_source_config(config) -> Dict[str, Any]:
+    """Return the stashed old-backend config (encrypted), or {} if none."""
+    parser = config._parser
+    if not parser.has_section(_MIGRATION_SOURCE_SECTION):
+        return {}
+    return dict(parser.items(_MIGRATION_SOURCE_SECTION))
+
+
+def save_migration_source_config(config, data: Dict[str, Any]) -> None:
+    """Stash *data* as the migration source, replacing any previous stash."""
+    parser = config._parser
+    if parser.has_section(_MIGRATION_SOURCE_SECTION):
+        parser.remove_section(_MIGRATION_SOURCE_SECTION)
+    parser.add_section(_MIGRATION_SOURCE_SECTION)
+    for k, v in data.items():
+        if v is not None:
+            parser.set(_MIGRATION_SOURCE_SECTION, k, str(v))
+    with open(config.config_path, "w", encoding="utf-8") as fh:
+        parser.write(fh)
+    parser.read(config.config_path)
+
+
+def delete_migration_source_config(config) -> None:
+    """Remove the migration-source stash after migration completes."""
+    parser = config._parser
+    if parser.has_section(_MIGRATION_SOURCE_SECTION):
+        parser.remove_section(_MIGRATION_SOURCE_SECTION)
         with open(config.config_path, "w", encoding="utf-8") as fh:
             parser.write(fh)
         parser.read(config.config_path)

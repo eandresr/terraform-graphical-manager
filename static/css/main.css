@@ -176,14 +176,48 @@ code, pre, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; 
   padding: 0.15rem 0.4rem;
   background-color: #f3f4f6;
   color: #6b7280;
-  text-transform: uppercase;
 }
 .providers-pill__val {
-  padding: 0.15rem 0.45rem;
+  padding: 0.1rem 0.35rem;
   background-color: #ffffff;
   color: #374151;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.15rem;
   text-transform: lowercase;
 }
+
+/* Per-provider colored chips inside providers-pill__val */
+.pchip {
+  display: inline-block;
+  border-radius: 2px;
+  padding: 0 0.2rem;
+  font-size: inherit;
+  font-weight: 700;
+  background-color: #f5f5f5;
+  color: #616161;
+}
+.pchip--aws          { background: #fff3e0; color: #c45b00; }
+.pchip--google       { background: #fce4ec; color: #c62828; }
+.pchip--azurerm      { background: #dbeafe; color: #1d4ed8; }
+.pchip--kubernetes   { background: #e0e7ff; color: #3730a3; }
+.pchip--helm         { background: #ccfbf1; color: #0f766e; }
+.pchip--github       { background: #f3f4f6; color: #1f2937; }
+.pchip--datadog      { background: #f3e8ff; color: #7e22ce; }
+.pchip--vault        { background: #fafafa; color: #1b1b1b; }
+.pchip--oci          { background: #fbe9e7; color: #bf360c; }
+.pchip--alicloud     { background: #fefce8; color: #a16207; }
+.pchip--ibm          { background: #dbeafe; color: #1e40af; }
+.pchip--cloudflare   { background: #fff7ed; color: #c2410c; }
+.pchip--digitalocean { background: #eff6ff; color: #1d4ed8; }
+.pchip--linode       { background: #f0fdf4; color: #15803d; }
+.pchip--vsphere      { background: #ede9fe; color: #6d28d9; }
+.pchip--openstack    { background: #fdf2f8; color: #be185d; }
+.pchip--scaleway     { background: #faf5ff; color: #7c3aed; }
+.pchip--hcloud       { background: #fef2f2; color: #b91c1c; }
+.pchip--ovh          { background: #eff6ff; color: #1e40af; }
+.pchip--exoscale     { background: #fff7ed; color: #c2410c; }
 
 /* Sidebar variant — slightly smaller */
 .providers-pill--sm {

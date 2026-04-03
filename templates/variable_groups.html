@@ -296,7 +296,7 @@
               <div class="col-span-5">
                 <input x-model="v.value"
                        :type="v.sensitive ? 'password' : 'text'"
-                       :placeholder="v.sensitive && v._existing ? 'Leave blank to keep current' : 'value'"
+                       :placeholder="v.sensitive && v._existing ? '***** Encrypted — leave blank to keep current *****' : 'value'"
                        class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-400">
               </div>
               <div class="col-span-1 flex items-center justify-center pt-1.5"

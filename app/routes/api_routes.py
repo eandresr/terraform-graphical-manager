@@ -1560,7 +1560,8 @@ def save_backend_config_api():
     """
     from flask import session as _session
     from app.backend_config import (
-        get_backend_config, save_backend_config, BACKEND_FIELDS, SENSITIVE_FIELDS
+        get_backend_config, save_backend_config, BACKEND_FIELDS, SENSITIVE_FIELDS,
+        save_migration_source_config, delete_migration_source_config,
     )
 
     config = current_app.config["TFG_CONFIG"]
@@ -1603,6 +1604,16 @@ def save_backend_config_api():
             from app.crypto import encrypt as _encrypt
             data[field] = _encrypt(new_val, enc_key)
 
+    # If the backend type is changing, stash the current (old) config so the
+    # migration endpoint can still reach the source credentials after the new
+    # config has been saved over them.
+    old_type = (existing.get("type") or "local").lower().strip()
+    if old_type != backend_type and old_type != "local" and existing:
+        save_migration_source_config(config, existing)
+    elif old_type == backend_type:
+        # Type unchanged — any previous stash is no longer relevant.
+        delete_migration_source_config(config)
+
     save_backend_config(config, data)
     return jsonify({"ok": True})
 
@@ -1629,11 +1640,12 @@ def test_backend_config_api():
         creds = dict(body)
         creds["type"] = backend_type
         # Decrypt any encrypted fields that were passed through
-        # (UI sends plaintext for new values, ciphertext token placeholder for unchanged)
+        # (UI sends plaintext for new values, ciphertext token placeholder for unchanged,
+        # or empty string when the field was never pre-filled in the form)
         for field in SENSITIVE_FIELDS.get(backend_type, []):
             val = creds.get(field, "")
-            if val == "••••••••":
-                # Use the saved encrypted value and decrypt it
+            if not val or val == "••••••••":
+                # Empty or placeholder → use the saved encrypted value.
                 saved = get_backend_config(config)
                 if saved.get(field) and enc_key:
                     from app.crypto import decrypt as _decrypt
@@ -1789,7 +1801,8 @@ def migrate_backend_api():
     """
     from flask import session as _session
     from app.backend_config import (
-        get_backend_config, decrypt_fields, migrate_backend, SENSITIVE_FIELDS
+        get_backend_config, decrypt_fields, migrate_backend, SENSITIVE_FIELDS,
+        get_migration_source_config,
     )
 
     config = current_app.config["TFG_CONFIG"]
@@ -1823,7 +1836,10 @@ def migrate_backend_api():
     else:
         for field in SENSITIVE_FIELDS.get(dest_type, []):
             val = dest_creds.get(field, "")
-            if val == "••••••••":
+            # Treat empty string the same as the mask placeholder: the UI did not
+            # provide a new value (sensitive fields are never pre-filled in the form),
+            # so always fall back to the saved encrypted value.
+            if not val or val == "••••••••":
                 saved = get_backend_config(config)
                 if saved.get(field) and enc_key:
                     from app.crypto import decrypt as _decrypt
@@ -1847,7 +1863,14 @@ def migrate_backend_api():
         elif body.get("source_creds"):
             source_creds_raw = dict(body["source_creds"])
         else:
-            source_creds_raw = get_backend_config(config)
+            # Prefer the stashed migration-source config (populated by
+            # save_backend_config_api when the type changed).  Fall back to
+            # the current saved config only when no stash exists.
+            stash = get_migration_source_config(config)
+            if stash and (stash.get("type") or "local").lower() == source_type:
+                source_creds_raw = stash
+            else:
+                source_creds_raw = get_backend_config(config)
     else:
         source_creds_raw = get_backend_config(config)
         source_type = (source_creds_raw.get("type") or "local").lower().strip()
@@ -1909,7 +1932,8 @@ def delete_source_backend_api():
     """
     from flask import session as _session
     from app.backend_config import (
-        get_backend_config, decrypt_fields, delete_backend_data
+        get_backend_config, decrypt_fields, delete_backend_data,
+        get_migration_source_config, delete_migration_source_config,
     )
 
     config = current_app.config["TFG_CONFIG"]
@@ -1920,7 +1944,13 @@ def delete_source_backend_api():
     if source_type == "local":
         source_creds_raw = {}
     else:
-        source_creds_raw = dict(body.get("source_creds") or get_backend_config(config) or {})
+        # Prefer the stashed migration-source config so we always delete from
+        # the correct (old) backend even after the new config has been saved.
+        stash = get_migration_source_config(config)
+        if stash and (stash.get("type") or "local").lower() == source_type:
+            source_creds_raw = stash
+        else:
+            source_creds_raw = dict(body.get("source_creds") or get_backend_config(config) or {})
 
     if source_type not in ("local",) and enc_key:
         try:
@@ -1931,6 +1961,9 @@ def delete_source_backend_api():
         source_creds = source_creds_raw
 
     result = delete_backend_data(source_type, source_creds)
+    if result.get("ok"):
+        # Migration is complete — remove the stash.
+        delete_migration_source_config(config)
     return jsonify(result)
 
 

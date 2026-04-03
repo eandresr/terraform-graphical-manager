@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import provider_code %}
+{% from "_macros.html" import provider_code, provider_chips %}
 
 {% block title %}Dashboard — Terraform Graphical Manager{% endblock %}
 
@@ -370,7 +370,7 @@
       <div class="mr-6">
         <span class="providers-pill">
           <span class="providers-pill__key">providers</span>
-          <span class="providers-pill__val">{{ ws.providers | join(', ') }}</span>
+          <span class="providers-pill__val">{{ provider_chips(ws.providers) }}</span>
         </span>
       </div>
       {% endif %}
