@@ -303,22 +303,12 @@ def workspace_stats(workspace_id: str):
     for meta in sorted(all_meta, key=lambda m: m.get("timestamp", "")):
         if meta.get("status") not in terminal_statuses:
             continue
-        resource_counts = meta.get("resource_counts")
-        # Backfill resource_counts for old plan runs that pre-date this field.
-        if resource_counts is None and meta.get("command") == "plan":
-            try:
-                from app.storage import get_backend as _gb2
-                plan_json = _gb2(enc_key).get_plan_json_by_id(meta.get("id", ""))
-                if plan_json:
-                    resource_counts = parse_plan(plan_json).get("counts")
-            except Exception:
-                pass
         series.append({
             "timestamp": meta.get("timestamp", ""),
             "command": meta.get("command", ""),
             "status": meta.get("status", ""),
             "duration_seconds": meta.get("duration_seconds"),
-            "resource_counts": resource_counts,
+            "resource_counts": meta.get("resource_counts"),
             "state_resource_count": meta.get("state_resource_count"),
         })
 

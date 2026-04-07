@@ -440,15 +440,6 @@ class ExecutionQueue:
         execution.plan_json = plan_json
         execution.plan_binary_path = plan_binary
 
-        # Capture current managed-resource count from state so the resource
-        # chart has a data point for every run, not just apply runs.
-        try:
-            from app.state_parser import parse_state as _parse_state
-            _state = runner.state_pull() or {}
-            execution.state_resource_count = _parse_state(_state).get("resource_count")
-        except Exception:
-            pass
-
     # ------------------------------------------------------------------
 
     def _run_sentinel(
