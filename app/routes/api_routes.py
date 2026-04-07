@@ -275,26 +275,50 @@ def delete_workspace_execution_lock(workspace_id: str):
 @api_bp.route("/workspace/<workspace_id>/stats")
 def workspace_stats(workspace_id: str):
     """Return time-series execution stats (duration + resource counts) for charts."""
+    from flask import session as _session
     workspace = _get_workspace_or_404(workspace_id)
     if workspace is None:
         return jsonify({"error": "Workspace not found"}), 404
+    enc_key = _session.get("tgm_enc_key", "")
     try:
         from app.storage import get_backend as _gb
-        all_meta = _gb().list_executions(workspace_id)
+        all_meta = _gb(enc_key).list_executions(workspace_id)
     except Exception:
         all_meta = []
+
+    # If the configured (cloud) backend returned nothing — either because it is
+    # unreachable or because runs predate the cloud migration — fall back to the
+    # local filesystem so charts still show historical data.
+    if not all_meta:
+        try:
+            from app.storage.local_backend import LocalBackend as _LocalBackend
+            local_meta = _LocalBackend().list_executions(workspace_id)
+            if local_meta:
+                all_meta = local_meta
+        except Exception:
+            pass
 
     terminal_statuses = {"completed", "failed"}
     series = []
     for meta in sorted(all_meta, key=lambda m: m.get("timestamp", "")):
         if meta.get("status") not in terminal_statuses:
             continue
+        resource_counts = meta.get("resource_counts")
+        # Backfill resource_counts for old plan runs that pre-date this field.
+        if resource_counts is None and meta.get("command") == "plan":
+            try:
+                from app.storage import get_backend as _gb2
+                plan_json = _gb2(enc_key).get_plan_json_by_id(meta.get("id", ""))
+                if plan_json:
+                    resource_counts = parse_plan(plan_json).get("counts")
+            except Exception:
+                pass
         series.append({
             "timestamp": meta.get("timestamp", ""),
             "command": meta.get("command", ""),
             "status": meta.get("status", ""),
             "duration_seconds": meta.get("duration_seconds"),
-            "resource_counts": meta.get("resource_counts"),
+            "resource_counts": resource_counts,
             "state_resource_count": meta.get("state_resource_count"),
         })
 
@@ -396,8 +420,10 @@ def set_workspace_metrics_config(workspace_id: str):
 
 @api_bp.route("/executions/<execution_id>")
 def get_execution(execution_id: str):
+    from flask import session as _session
     eq = current_app.config["EXECUTION_QUEUE"]
-    execution = eq.get(execution_id)
+    enc_key = _session.get("tgm_enc_key", "")
+    execution = eq.get(execution_id, enc_key)
     if execution is None:
         return jsonify({"error": "Execution not found"}), 404
     return jsonify(execution.to_dict())
@@ -405,8 +431,10 @@ def get_execution(execution_id: str):
 
 @api_bp.route("/executions/<execution_id>/logs")
 def get_execution_logs(execution_id: str):
+    from flask import session as _session
     eq = current_app.config["EXECUTION_QUEUE"]
-    execution = eq.get(execution_id)
+    enc_key = _session.get("tgm_enc_key", "")
+    execution = eq.get(execution_id, enc_key)
     if execution is None:
         return jsonify({"error": "Execution not found"}), 404
 
@@ -414,7 +442,7 @@ def get_execution_logs(execution_id: str):
     if getattr(execution, "_from_storage", False) and not execution.logs:
         try:
             from app.storage import get_backend
-            backend = get_backend()
+            backend = get_backend(enc_key)
             raw = backend.get_logs_by_id(execution_id)
             if raw:
                 execution.logs = raw.splitlines()
@@ -428,8 +456,10 @@ def get_execution_logs(execution_id: str):
 
 @api_bp.route("/executions/<execution_id>/plan")
 def get_execution_plan(execution_id: str):
+    from flask import session as _session
+    enc_key = _session.get("tgm_enc_key", "")
     eq = current_app.config["EXECUTION_QUEUE"]
-    execution = eq.get(execution_id)
+    execution = eq.get(execution_id, enc_key)
     if execution is None:
         return jsonify({"error": "Execution not found"}), 404
 
@@ -438,7 +468,7 @@ def get_execution_plan(execution_id: str):
     if not plan_json and getattr(execution, "_from_storage", False):
         try:
             from app.storage import get_backend
-            backend = get_backend()
+            backend = get_backend(enc_key)
             plan_json = backend.get_plan_json_by_id(execution_id)
         except Exception:
             pass
@@ -458,8 +488,10 @@ def cancel_execution(execution_id: str):
 
 @api_bp.route("/workspace/<workspace_id>/executions")
 def workspace_executions(workspace_id: str):
+    from flask import session as _session
     eq = current_app.config["EXECUTION_QUEUE"]
-    runs = eq.list_for_workspace(workspace_id)
+    enc_key = _session.get("tgm_enc_key", "")
+    runs = eq.list_for_workspace(workspace_id, enc_key)
     runs_sorted = sorted(runs, key=lambda r: r.timestamp, reverse=True)
     return jsonify([r.to_dict() for r in runs_sorted])
 

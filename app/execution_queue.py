@@ -190,14 +190,14 @@ class ExecutionQueue:
         self._queue.put(execution)
         return execution.id
 
-    def get(self, execution_id: str) -> Optional[Execution]:
+    def get(self, execution_id: str, enc_key: str = "") -> Optional[Execution]:
         # 1. Check in-memory first
         if execution_id in self._executions:
             return self._executions[execution_id]
         # 2. Fall back to storage
         try:
             from app.storage import get_backend
-            backend = get_backend()
+            backend = get_backend(enc_key)
             meta = backend.get_execution_by_id(execution_id)
             if meta:
                 return Execution.from_metadata(meta)
@@ -209,7 +209,7 @@ class ExecutionQueue:
         with self._lock:
             return list(self._executions.values())
 
-    def list_for_workspace(self, workspace_id: str) -> List[Execution]:
+    def list_for_workspace(self, workspace_id: str, enc_key: str = "") -> List[Execution]:
         # In-memory runs (running/queued/recent)
         with self._lock:
             in_memory = {e.id: e for e in self._executions.values()
@@ -217,7 +217,7 @@ class ExecutionQueue:
         # Historical runs from storage
         try:
             from app.storage import get_backend
-            backend = get_backend()
+            backend = get_backend(enc_key)
             for meta in backend.list_executions(workspace_id):
                 eid = meta.get("id")
                 if eid and eid not in in_memory:
@@ -280,7 +280,7 @@ class ExecutionQueue:
         # Persist an execution lock so other sessions can detect an active run.
         try:
             from app.storage import get_backend as _get_backend
-            _get_backend().set_execution_lock(
+            _get_backend(execution.enc_key).set_execution_lock(
                 execution.workspace_id,
                 {
                     "execution_id": execution.id,
@@ -410,7 +410,7 @@ class ExecutionQueue:
             # Release the execution lock now that the run has finished.
             try:
                 from app.storage import get_backend as _get_backend
-                _get_backend().clear_execution_lock(execution.workspace_id)
+                _get_backend(execution.enc_key).clear_execution_lock(execution.workspace_id)
             except Exception:
                 pass
             import shutil
@@ -439,6 +439,15 @@ class ExecutionQueue:
         plan_json = runner.show_json(plan_binary, log)
         execution.plan_json = plan_json
         execution.plan_binary_path = plan_binary
+
+        # Capture current managed-resource count from state so the resource
+        # chart has a data point for every run, not just apply runs.
+        try:
+            from app.state_parser import parse_state as _parse_state
+            _state = runner.state_pull() or {}
+            execution.state_resource_count = _parse_state(_state).get("resource_count")
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
 
