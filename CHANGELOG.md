@@ -274,6 +274,56 @@ export) and alerting (notification channels) baked in.
 
 ---
 
+## [0.4.0] — 2026-04-07
+
+### Fixed
+
+#### Cloud backend encryption key not propagated to storage backends
+- **Root cause**: all three cloud backends (`GCSBackend`, `S3Backend`, `AzureBackend`) decrypt
+  their stored credentials using an `enc_key` parameter. When `enc_key=""` they fall back to
+  `flask.session["tgm_enc_key"]`, which is only available inside a request context.
+  Several API endpoints and background-thread operations called `get_backend()` without passing
+  the key, causing credential decryption to be silently skipped — `list_executions()` would
+  catch the resulting `JSONDecodeError` and return `[]`, making charts and run lists appear empty.
+- **Affected endpoints fixed** (`app/routes/api_routes.py`):
+  - `GET /api/workspace/{id}/stats` — execution statistics charts were always empty for cloud backends.
+  - `GET /api/workspace/{id}/executions` — Runs tab showed no history when using GCP/AWS/Azure.
+  - `GET /api/executions/{id}` — execution detail failed to load from cloud storage.
+  - `GET /api/executions/{id}/logs` — logs could not be fetched from cloud storage.
+  - `GET /api/executions/{id}/plan` — plan JSON could not be fetched from cloud storage.
+- **Affected background operations fixed** (`app/execution_queue.py`):
+  - `ExecutionQueue.get(execution_id)` — new `enc_key=""` parameter passed to `get_backend()`.
+  - `ExecutionQueue.list_for_workspace(workspace_id)` — new `enc_key=""` parameter passed to `get_backend()`.
+  - `set_execution_lock` / `clear_execution_lock` in `_run_execution` — worker threads have no Flask
+    request context; both calls now use `execution.enc_key` (carried from the submitting request)
+    instead of relying on `flask.session`.
+
+#### Execution statistics charts empty on Overview tab with cloud backend configured
+- Direct consequence of the `enc_key` bug above. Charts for Duration and Total Managed Resources
+  now populate correctly for GCP, AWS, and Azure backends after login.
+
+#### Local filesystem fallback added to `workspace_stats`
+- When the configured cloud backend returns an empty execution list (e.g. credentials not yet set
+  up, network issue, or data pre-dates the cloud migration), `GET /api/workspace/{id}/stats` now
+  falls back to the local filesystem backend before returning `{"series": []}`.
+  Historical data is always visible regardless of cloud backend availability.
+
+### Changed
+
+#### `resource_counts` and `state_resource_count` now stored for `plan` runs
+- `_build_metadata()` in `local_backend.py` (and equivalently in the cloud backends) already
+  computed `resource_counts` from `plan.json` when available, but `state_resource_count` was
+  never set for plan-type runs — only apply runs populated it via `state_pull()`.
+- The `metadata.json` for every `plan` run now includes:
+  - `resource_counts` — `{create, update, delete, replace, no-op}` breakdown parsed from `plan.json`.
+  - `state_resource_count` — projected total of managed resources after the plan is applied
+    (`no-op + create + update + replace`).
+- This ensures the **Total Managed Resources** chart has data points for workspaces that have
+  only ever been `plan`-ned (never applied), and makes resource counts consistent across both
+  chart series.
+
+---
+
 ## [0.3.0] — 2026-03-31
 
 > Branch: `feature/git-integration`
@@ -420,8 +470,10 @@ export) and alerting (notification channels) baked in.
 
 ---
 
+[1.2.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.3.0...v1.0.0
+[1.0.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.4.0...v1.0.0
+[0.4.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/eandresr/terraform-graphical-manager/releases/tag/v0.1.0
