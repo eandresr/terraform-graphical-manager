@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import provider_code %}
+{% from "_macros.html" import provider_code, provider_chips %}
 
 {% block title %}{{ workspace.name }} — Terraform Graphical Manager{% endblock %}
 
@@ -33,14 +33,18 @@
           <h1 class="text-xl font-bold text-gray-900">{{ workspace.name }}</h1>
 
           <!-- Providers -->
-          {% for p in workspace.providers %}
-            <span class="provider-badge provider-{{ p }}" title="{{ p }}">{{ provider_code(p) }}</span>
-          {% endfor %}
+          {% if workspace.providers %}
+            <span class="providers-pill">
+              <span class="providers-pill__key">providers</span>
+              <span class="providers-pill__val">{{ provider_chips(workspace.providers) }}</span>
+            </span>
+          {% endif %}
 
           <!-- Backend -->
           {% if workspace.backend %}
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-              backend: {{ workspace.backend }}
+            <span class="providers-pill">
+              <span class="providers-pill__key">tf_backend</span>
+              <span class="providers-pill__val">{{ workspace.backend }}</span>
             </span>
           {% endif %}
 
@@ -96,7 +100,22 @@
           Sentinel
         </button>
 
+        <!-- Manual lock / force-unlock toggle -->
+        <button x-show="!wsLock"
+                @click="openManualLockModal()"
+                title="Lock this workspace to prevent new runs"
+                class="btn-secondary text-sm">
+          <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+          </svg>
+          Lock
+        </button>
+
         <button @click="openPlanModal()"
+                :disabled="!!wsLock"
+                :title="wsLock ? 'Workspace is locked by an active run' : ''"
+                :class="wsLock ? 'opacity-50 cursor-not-allowed' : ''"
                 class="btn-secondary text-sm">
           <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 8l2 2 4-4"/>
@@ -105,6 +124,9 @@
         </button>
 
         <button @click="openApplyPreview()"
+                :disabled="!!wsLock"
+                :title="wsLock ? 'Workspace is locked by an active run' : ''"
+                :class="wsLock ? 'opacity-50 cursor-not-allowed' : ''"
                 class="btn-primary text-sm">
           <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
@@ -117,7 +139,7 @@
     <!-- Tab nav -->
     <div class="mt-5 border-t border-gray-100 pt-4">
       <nav class="flex space-x-1">
-        {% for tab_id, tab_label in [('overview','Overview'),('vars','Variables'),('output','Output'),('runs','Runs'),('state','Resources'),('plan','Plan Diff'),('graph','Graph'),('sentinel','Sentinel'),('destroy','Destroy')] %}
+        {% for tab_id, tab_label in [('overview','Overview'),('vars','Variables'),('output','Output'),('runs','Runs'),('state','Resources'),('plan','Plan Diff'),('graph','Graph'),('sentinel','Sentinel'),('destroy','Destroy'),('notifications','Notifications')] %}
           <button @click="switchTab('{{ tab_id }}')"
                   :class="activeTab === '{{ tab_id }}' ? 'tab-active' : 'tab-inactive'"
                   class="tab">
@@ -129,10 +151,167 @@
   </div>
 
   <!-- ================================================================
+       EXECUTION LOCK BANNER
+       ================================================================ -->
+  <div x-show="wsLock" x-transition
+       class="mb-5 rounded-xl border px-5 py-4 flex items-start justify-between space-x-4"
+       :class="wsLock && wsLock.manual
+         ? 'bg-orange-50 border-orange-300 text-orange-900'
+         : wsLockForeign
+           ? 'bg-red-50 border-red-300 text-red-800'
+           : 'bg-amber-50 border-amber-300 text-amber-800'">
+    <div class="flex items-start space-x-3 min-w-0">
+      <!-- icon: padlock for manual, triangle for execution -->
+      <template x-if="wsLock && wsLock.manual">
+        <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-orange-500"
+             fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+      </template>
+      <template x-if="!wsLock || !wsLock.manual">
+        <svg class="w-5 h-5 flex-shrink-0 mt-0.5" :class="wsLockForeign ? 'text-red-500' : 'text-amber-500'"
+             fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+      </template>
+      <div class="min-w-0">
+        <!-- Title line -->
+        <p class="text-sm font-semibold"
+           x-text="wsLock && wsLock.manual
+             ? 'This workspace is manually locked.'
+             : wsLockForeign
+               ? 'Another session is running a ' + (wsLock && wsLock.command) + ' on this workspace.'
+               : 'This workspace is running a ' + (wsLock && wsLock.command) + '.'"></p>
+        <!-- Reason (manual locks) -->
+        <p x-show="wsLock && wsLock.reason"
+           class="text-sm mt-1 font-medium italic"
+           x-text="wsLock && wsLock.reason ? '\u201c' + wsLock.reason + '\u201d' : ''"></p>
+        <!-- Metadata line -->
+        <p class="text-xs mt-0.5 opacity-80">
+          <span x-show="wsLock && wsLock.execution_id"
+                x-text="'Run ID: ' + (wsLock && wsLock.execution_id ? wsLock.execution_id.slice(0,8) : '')"></span>
+          <span x-show="wsLock && wsLock.started_at"
+                x-text="(wsLock && wsLock.execution_id ? ' \u00b7 ' : '') + 'Locked at ' + (wsLock && wsLock.started_at ? wsLock.started_at.replace('T',' ').slice(0,19) + ' UTC' : '')"></span>
+        </p>
+        <p x-show="wsLockForeign && !(wsLock && wsLock.manual)" class="text-xs mt-1 font-medium">
+          Reload the page to see the latest run status. Plan / Apply / Destroy are disabled until the run finishes.
+        </p>
+        <p x-show="wsLock && wsLock.manual" class="text-xs mt-1">
+          Plan / Apply / Destroy are disabled while the workspace is manually locked.
+        </p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-2 flex-shrink-0">
+      <button x-show="wsLockForeign && !(wsLock && wsLock.manual)"
+              @click="window.location.reload()"
+              class="px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors
+                     bg-red-100 border-red-300 text-red-800 hover:bg-red-200">
+        Reload
+      </button>
+      <button x-show="wsLock && !wsLockForeign && !(wsLock && wsLock.manual)"
+              @click="switchTab('runs')"
+              class="px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors
+                     bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200">
+        View run
+      </button>
+      <!-- Force unlock — always available -->
+      <button @click="forceUnlockWs()"
+              :disabled="wsLockUnlocking"
+              class="px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors
+                     bg-white border-gray-300 text-gray-700 hover:bg-gray-50
+                     disabled:opacity-50 disabled:cursor-wait flex items-center space-x-1.5">
+        <svg class="w-3.5 h-3.5" :class="wsLockUnlocking ? 'animate-spin' : ''"
+             fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
+        </svg>
+        <span x-text="wsLockUnlocking ? 'Unlocking…' : 'Force unlock'"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ================================================================
        TAB: OVERVIEW
        ================================================================ -->
   <div x-show="activeTab === 'overview'" x-transition>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+      <!-- Manual lock card (full width, only shown when manually locked) -->
+      <template x-if="wsLock && wsLock.manual">
+        <div class="lg:col-span-3 bg-orange-50 border border-orange-300 rounded-xl p-5
+                    flex items-start justify-between space-x-4">
+          <div class="flex items-start space-x-3 min-w-0">
+            <div class="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+              </svg>
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-orange-900">Workspace manually locked</p>
+              <p class="text-sm text-orange-800 mt-1 italic font-medium"
+                 x-text="'\u201c' + (wsLock && wsLock.reason ? wsLock.reason : '') + '\u201d'"></p>
+              <p class="text-xs text-orange-700 mt-1 opacity-80"
+                 x-text="'Locked at ' + (wsLock && wsLock.started_at ? wsLock.started_at.replace('T',' ').slice(0,19) + ' UTC' : '')"></p>
+            </div>
+          </div>
+          <button @click="forceUnlockWs()"
+                  :disabled="wsLockUnlocking"
+                  class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold
+                         bg-white border border-orange-300 text-orange-800 rounded-lg
+                         hover:bg-orange-50 transition-colors disabled:opacity-50 disabled:cursor-wait flex-shrink-0">
+            <svg class="w-3.5 h-3.5" :class="wsLockUnlocking ? 'animate-spin' : ''"
+                 fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
+            </svg>
+            <span x-text="wsLockUnlocking ? 'Unlocking…' : 'Unlock'"></span>
+          </button>
+        </div>
+      </template>
+
+      <!-- GitHub token warning (full width, shown when modules use GitHub but no token is configured) -->
+      <template x-if="githubTokenCheck && githubTokenCheck.missing_token">
+        <div class="lg:col-span-3 bg-amber-50 border border-amber-300 rounded-xl p-5
+                    flex items-start space-x-4">
+          <div class="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-amber-900">GitHub token not configured</p>
+            <p class="text-xs text-amber-800 mt-1">
+              This workspace uses Terraform modules sourced from GitHub but has no
+              <code class="bg-amber-100 px-1 py-0.5 rounded font-mono">GITHUB_TOKEN</code>
+              environment variable set in any variable group or workspace variable.
+              <code>terraform init</code> may fail when fetching these modules.
+            </p>
+            <!-- Module list -->
+            <div class="mt-2 flex flex-wrap gap-1.5">
+              <template x-for="mod in githubTokenCheck.github_modules" :key="mod.name + mod.source">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                             bg-amber-100 text-amber-800 text-xs font-mono border border-amber-200">
+                  <svg class="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
+                  </svg>
+                  <span x-text="mod.name"></span>
+                  <span class="opacity-60 font-sans normal-case" x-text="'(' + (mod.source.length > 40 ? mod.source.slice(0,40) + '…' : mod.source) + ')'"></span>
+                </span>
+              </template>
+            </div>
+            <p class="text-xs text-amber-700 mt-2">
+              Fix: add an <strong>env</strong>-type variable with key
+              <code class="bg-amber-100 px-1 py-0.5 rounded font-mono">GITHUB_TOKEN</code>
+              to a variable group assigned to this workspace, or in the
+              <a href="?tab=vars" class="underline hover:text-amber-900">Variables</a> tab.
+            </p>
+          </div>
+        </div>
+      </template>
 
       <!-- Last run card -->
       <div class="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
@@ -442,6 +621,133 @@
     </div>
     {% endif %}
 
+    <!-- Metrics export toggle -->
+    <div class="mt-5 bg-white rounded-xl border border-gray-200 p-5">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center border border-gray-200">
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+            </svg>
+          </div>
+          <div>
+            <p class="text-sm font-semibold text-gray-900">Send metrics</p>
+            <p class="text-xs text-gray-400 mt-0.5">
+              Export execution metrics to the configured backend after each run.
+              Disable to opt this workspace out.
+            </p>
+          </div>
+        </div>
+        <!-- Toggle switch -->
+        <label class="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-4"
+               :class="wsMetricsSaving ? 'opacity-60 pointer-events-none' : ''">
+          <input type="checkbox" class="sr-only peer"
+                 :checked="wsMetricsEnabled"
+                 @change="toggleWsMetrics($event.target.checked)">
+          <div class="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer
+                      peer-checked:after:translate-x-5
+                      after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                      after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all
+                      peer-checked:bg-tf-600 transition-colors"></div>
+        </label>
+      </div>
+      <!-- Disabled hint -->
+      <div x-show="!wsMetricsEnabled" x-transition
+           class="mt-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516
+                2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5
+                0v-4.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+        </svg>
+        Metrics are disabled for this workspace. Enable the toggle to resume sending.
+      </div>
+    </div>
+
+    <!-- Execution Statistics charts -->
+    <div class="mt-5 bg-white rounded-xl border border-gray-200 p-5">
+      <div class="flex items-center justify-between mb-5">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center border border-gray-200">
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012
+                       2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-900 text-sm">Execution Statistics</h3>
+            <p class="text-xs text-gray-400">Duration and total managed resources over time</p>
+          </div>
+        </div>
+        <button @click="loadWsStats()" :disabled="wsStatsLoading"
+                class="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600
+                       transition-colors disabled:opacity-40 disabled:cursor-wait px-2 py-1 rounded-md
+                       hover:bg-gray-50 border border-transparent hover:border-gray-200">
+          <svg class="w-3.5 h-3.5" :class="wsStatsLoading ? 'animate-spin' : ''"
+               fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9
+                     m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <span x-text="wsStatsLoading ? 'Loading…' : 'Refresh'"></span>
+        </button>
+      </div>
+
+      <!-- Empty state -->
+      <div x-show="!wsStatsLoading && wsStats.length === 0"
+           class="flex flex-col items-center justify-center py-12 text-center">
+        <div class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+          <svg class="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375
+                     21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504
+                     1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625z"/>
+          </svg>
+        </div>
+        <p class="text-sm text-gray-400 font-medium">No execution history yet</p>
+        <p class="text-xs text-gray-300 mt-1">Run a plan or apply to start collecting data</p>
+      </div>
+
+      <!-- Charts grid -->
+      <div x-show="wsStats.length > 0">
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+          <!-- Duration over time -->
+          <div>
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              Execution Duration
+            </p>
+            <div x-show="wsStats.filter(s => s.duration_seconds != null).length > 0"
+                 class="relative h-52">
+              <canvas x-ref="chartDuration"></canvas>
+            </div>
+            <div x-show="wsStats.filter(s => s.duration_seconds != null).length === 0"
+                 class="h-52 flex items-center justify-center">
+              <p class="text-xs text-gray-300">No duration metrics yet</p>
+            </div>
+          </div>
+
+          <!-- Total managed resources over time (plan + apply) -->
+          <div>
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              Total Managed Resources
+              <span class="normal-case font-normal text-gray-300 ml-1">(plan &amp; apply)</span>
+            </p>
+            <div x-show="wsStats.filter(s => (s.command === 'plan' && s.resource_counts) || (s.command === 'apply' && s.state_resource_count != null)).length > 0"
+                 class="relative h-52">
+              <canvas x-ref="chartResources"></canvas>
+            </div>
+            <div x-show="wsStats.filter(s => (s.command === 'plan' && s.resource_counts) || (s.command === 'apply' && s.state_resource_count != null)).length === 0"
+                 class="h-52 flex items-center justify-center">
+              <p class="text-xs text-gray-300">No resource metrics yet</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div><!-- /Execution Statistics -->
+
   </div>
 
   <!-- ================================================================
@@ -678,7 +984,7 @@
                         <td class="px-5 py-2">
                           <span :class="v.type==='terraform' ? 'bg-purple-100 text-purple-700' : 'bg-teal-100 text-teal-700'"
                                 class="inline-flex items-center px-1.5 py-0.5 rounded font-semibold">
-                            <span x-text="v.type==='terraform' ? 'TF_VAR_*' : 'env'"></span>
+                            <span x-text="v.type==='terraform' ? 'TF VAR' : 'env'"></span>
                           </span>
                         </td>
                         <td class="px-5 py-2 font-mono text-gray-600">
@@ -717,7 +1023,7 @@
     </template>
 
     {# ====== CREATE / EDIT GROUP MODAL ====== #}
-    <div x-show="showGroupModal" x-transition.opacity
+    <div x-show="showGroupModal" x-cloak x-transition.opacity
          class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
          @click="showGroupModal=false"
          @keydown.escape.window="showGroupModal=false">
@@ -788,7 +1094,7 @@
                   <div class="col-span-2">
                     <select x-model="v.type"
                             class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-tf-400">
-                      <option value="terraform">TF_VAR_*</option>
+                      <option value="terraform">TF VAR</option>
                       <option value="env">env</option>
                     </select>
                   </div>
@@ -845,7 +1151,7 @@
     </div>
 
     {# ====== ASSIGN EXISTING GROUP MODAL ====== #}
-    <div x-show="showAssignModal" x-transition.opacity
+    <div x-show="showAssignModal" x-cloak x-transition.opacity
          class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
          @click="showAssignModal=false"
          @keydown.escape.window="showAssignModal=false">
@@ -969,14 +1275,14 @@
                     <div class="col-span-2">
                       <select x-model="v.type"
                               class="w-full px-2 py-1.5 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-tf-400">
-                        <option value="terraform">TF_VAR_*</option>
+                        <option value="terraform">TF VAR</option>
                         <option value="env">env</option>
                       </select>
                     </div>
                     <div class="col-span-5">
                       <input x-model="v.value"
                              :type="v.sensitive ? 'password' : 'text'"
-                             :placeholder="v.sensitive && v._existing ? 'Leave blank to keep current' : 'value'"
+                             :placeholder="v.sensitive && v._existing ? '***** Encrypted — leave blank to keep current *****' : 'value'"
                              class="w-full px-2 py-1.5 border border-gray-200 rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-tf-400">
                     </div>
                     <div class="col-span-1 flex items-center justify-center"
@@ -2117,7 +2423,7 @@
   <!-- ================================================================
        APPLY PREVIEW MODAL
        ================================================================ -->
-  <div x-show="applyPreviewOpen"
+  <div x-show="applyPreviewOpen" x-cloak
        x-transition:enter="transition ease-out duration-200"
        x-transition:enter-start="opacity-0"
        x-transition:enter-end="opacity-100"
@@ -2675,7 +2981,8 @@
                       focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent mb-5">
 
         <button @click="submitDestroy()"
-                :disabled="destroyConfirmText !== 'destroy' || destroySubmitting"
+                :disabled="destroyConfirmText !== 'destroy' || destroySubmitting || !!wsLock"
+                :title="wsLock ? 'Workspace is locked by an active run' : ''"
                 class="w-full flex items-center justify-center px-4 py-2.5 rounded-lg font-medium text-sm
                        bg-red-600 hover:bg-red-700 text-white transition-colors
                        disabled:opacity-40 disabled:cursor-not-allowed">
@@ -2701,9 +3008,634 @@
   </div><!-- /tab destroy -->
 
   <!-- ================================================================
+       TAB: NOTIFICATIONS
+       ================================================================ -->
+  <div x-show="activeTab === 'notifications'" x-transition>
+    <div class="max-w-4xl mx-auto py-6 px-2 space-y-6">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-gray-800">Notification Channels</h2>
+          <p class="text-sm text-gray-500 mt-0.5">Configure where to send alerts when executions finish.</p>
+        </div>
+        <button @click="openNotifCreate()"
+                class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          Add Channel
+        </button>
+      </div>
+
+      <!-- Loading -->
+      <div x-show="notifLoading" class="text-center py-12 text-gray-400">
+        <svg class="animate-spin mx-auto w-6 h-6 mb-2" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+        </svg>
+        Loading channels…
+      </div>
+
+      <!-- Empty state -->
+      <div x-show="!notifLoading && notifChannels.length === 0"
+           class="rounded-xl border-2 border-dashed border-gray-200 py-16 text-center">
+        <svg class="mx-auto w-10 h-10 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+        </svg>
+        <p class="text-gray-500 font-medium">No notification channels yet</p>
+        <p class="text-sm text-gray-400 mt-1">Click <strong>Add Channel</strong> to create your first channel.</p>
+      </div>
+
+      <!-- Channel cards -->
+      <template x-for="ch in notifChannels" :key="ch.id">
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-4">
+            <!-- Left: icon + info -->
+            <div class="flex items-center gap-4 min-w-0">
+              <!-- Type icon -->
+              <div class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center"
+                   :class="{
+                     'bg-purple-50': ch.type==='slack',
+                     'bg-blue-50':   ch.type==='teams',
+                     'bg-amber-50':  ch.type==='email',
+                     'bg-red-50':    ch.type==='pagerduty',
+                     'bg-orange-50': ch.type==='alertmanager'
+                   }">
+                <!-- Slack icon -->
+                <svg x-show="ch.type==='slack'" class="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.122 2.521a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zm-1.268 0a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zm-2.523 10.122a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zm0-1.268a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/>
+                </svg>
+                <!-- Teams icon -->
+                <svg x-show="ch.type==='teams'" class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M20.625 6H15v12h5.625C21.938 18 23 16.933 23 15.625v-7.25C23 7.067 21.938 6 20.625 6zM12 4a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm6 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 4c-2.67 0-8 1.337-8 4v1h16v-1c0-2.663-5.33-4-8-4z"/>
+                </svg>
+                <!-- Email icon -->
+                <svg x-show="ch.type==='email'" class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                </svg>
+                <!-- PagerDuty icon -->
+                <svg x-show="ch.type==='pagerduty'" class="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M16.156 2c1.71 0 3.031.476 3.781 1.2C20.75 4.024 21 5.12 21 6.2c0 2.2-1.059 4.356-3.375 5.384L14.5 13H19v3h-7v-2.794l3.875-1.862C17.75 10.469 18.5 9.05 18.5 6.2c0-.912-.5-2.2-2.344-2.2C14.594 4 13.5 5.169 13.5 7H11c0-2.956 1.844-5 5.156-5zM5 3h2v18H5z"/>
+                </svg>
+                <!-- Alertmanager icon -->
+                <svg x-show="ch.type==='alertmanager'" class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                </svg>
+              </div>
+
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-medium text-gray-800" x-text="ch.name"></span>
+                  <!-- Enabled/disabled badge -->
+                  <span x-show="!ch.enabled"
+                        class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">Disabled</span>
+                  <!-- Scope badge -->
+                  <span class="text-xs px-1.5 py-0.5 rounded font-medium"
+                        :class="(ch.workspace_ids||[]).includes('*') ? 'bg-indigo-100 text-indigo-700' : 'bg-teal-100 text-teal-700'"
+                        x-text="(ch.workspace_ids||[]).includes('*') ? 'Global' : 'This workspace'"></span>
+                  <!-- Type badge -->
+                  <span class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded capitalize" x-text="ch.type"></span>
+                </div>
+                <!-- Trigger badges -->
+                <div class="flex flex-wrap gap-1 mt-1">
+                  <template x-for="t in (ch.notify_on||[])" :key="t">
+                    <span class="text-xs px-1.5 py-0.5 rounded"
+                          :class="{
+                            'bg-green-100 text-green-700': t==='on_success',
+                            'bg-red-100 text-red-700':     t==='on_failure',
+                            'bg-orange-100 text-orange-700': t==='on_sentinel_fail'
+                          }"
+                          x-text="t==='on_success' ? 'On success' : t==='on_failure' ? 'On failure' : 'Sentinel fail'">
+                    </span>
+                  </template>
+                </div>
+                <!-- Prefix template preview -->
+                <p class="text-xs text-gray-400 mt-0.5 truncate" x-show="ch.prefix_template">
+                  Prefix: <span class="font-mono" x-text="ch.prefix_template"></span>
+                </p>
+              </div>
+            </div>
+
+            <!-- Right: actions -->
+            <div class="flex items-center gap-2 flex-shrink-0 ml-4">
+              <!-- Test button -->
+              <button @click="testNotifChannel(ch)"
+                      :disabled="notifTesting === ch.id"
+                      class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-50">
+                <svg x-show="notifTesting !== ch.id" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <svg x-show="notifTesting === ch.id" class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                </svg>
+                Test
+              </button>
+              <!-- Test result pill -->
+              <span x-show="notifTestResult[ch.id]" x-transition
+                    class="text-xs px-2 py-0.5 rounded-full font-medium"
+                    :class="notifTestResult[ch.id]?.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'"
+                    x-text="notifTestResult[ch.id]?.ok ? 'Sent!' : (notifTestResult[ch.id]?.msg || 'Error')">
+              </span>
+              <!-- Edit -->
+              <button @click="openNotifEdit(ch)"
+                      class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-blue-600 border border-blue-200 hover:bg-blue-50">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                </svg>
+                Edit
+              </button>
+              <!-- Unassign global / Delete workspace -->
+              <button @click="deleteNotifChannel(ch)"
+                      :disabled="notifDeleting === ch.id"
+                      class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                <span x-text="(ch.workspace_ids||[]).includes('*') ? 'Unassign' : 'Delete'"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Assign global channel section -->
+      <div class="bg-gray-50 rounded-xl border border-gray-200 p-5">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">Assign a Global Channel</h3>
+        <div x-show="notifAllGlobal.length === 0" class="text-sm text-gray-400">
+          No global channels are available. Create one from any workspace with scope set to "Global".
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <template x-for="gc in notifAllGlobal" :key="gc.id">
+            <button @click="assignGlobalChannel(gc.id)"
+                    :disabled="notifAssigning === gc.id || notifChannels.map(c=>c.id).includes(gc.id)"
+                    class="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm cursor-pointer transition-colors"
+                    :class="notifChannels.map(c=>c.id).includes(gc.id)
+                            ? 'bg-green-50 border-green-300 text-green-700 cursor-default'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-blue-50 hover:border-blue-300'">
+              <svg x-show="notifChannels.map(c=>c.id).includes(gc.id)" class="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              <span x-text="gc.name"></span>
+              <span class="text-xs text-gray-400 capitalize" x-text="'(' + gc.type + ')'"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+    </div><!-- /max-w inner -->
+  </div><!-- /tab notifications -->
+
+  <!-- ================================================================
+       MODAL: CREATE / EDIT NOTIFICATION CHANNEL
+       ================================================================ -->
+  <div x-show="notifModalOpen" x-cloak x-transition.opacity
+       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+       @click.self="notifModalOpen = false"
+       @keydown.escape.window="notifModalOpen = false">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <h2 class="text-lg font-semibold text-gray-800"
+            x-text="notifEditId ? 'Edit Channel' : 'New Notification Channel'"></h2>
+        <button @click="notifModalOpen = false" class="text-gray-400 hover:text-gray-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="px-6 py-5 space-y-5">
+        <!-- Name -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <input type="text" x-model="notifForm.name"
+                 placeholder="e.g. Ops Slack #terraform"
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+
+        <!-- Type selector -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Channel Type</label>
+          <div class="grid grid-cols-5 gap-2">
+            <template x-for="t in ['slack','teams','email','pagerduty','alertmanager']" :key="t">
+              <button @click="notifForm.type = t; notifTypeChange()"
+                      class="rounded-lg border px-2 py-2 text-sm font-medium capitalize transition"
+                      :class="notifForm.type === t
+                        ? 'bg-blue-600 border-blue-600 text-white'
+                        : 'bg-white border-gray-300 text-gray-600 hover:border-blue-400'">
+                <span x-text="t === 'pagerduty' ? 'PagerDuty' : t === 'alertmanager' ? 'Alertmanager' : t.charAt(0).toUpperCase() + t.slice(1)"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- ── Slack config ── -->
+        <div x-show="notifForm.type === 'slack'" class="space-y-3">
+          <!-- Method selector -->
+          <div class="flex gap-4">
+            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+              <input type="radio" x-model="notifForm.config.method" value="webhook" class="accent-blue-600">
+              Incoming Webhook
+            </label>
+            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+              <input type="radio" x-model="notifForm.config.method" value="token" class="accent-blue-600">
+              Bot Token (API)
+            </label>
+          </div>
+
+          <!-- Webhook sub-panel -->
+          <div x-show="(notifForm.config.method||'webhook') === 'webhook'" class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Webhook URL <span class="text-red-500">*</span></label>
+              <input type="password" x-model="notifForm.config.webhook_url"
+                     :placeholder="notifEditId && notifForm.config.webhook_url === '***' ? '●●●●●●●● (saved)' : 'https://hooks.slack.com/services/T.../B.../xxx'"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <!-- Bot Token sub-panel -->
+          <div x-show="notifForm.config.method === 'token'" class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Bot Token <span class="text-red-500">*</span></label>
+              <input type="password" x-model="notifForm.config.token"
+                     :placeholder="notifEditId && notifForm.config.token === '***' ? '●●●●●●●● (saved)' : 'xoxb-...'"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <p class="text-xs text-gray-500 mt-1">Requires <code>chat:write</code> scope. The <strong>Channel</strong> field is required when using a token.</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Channel <span x-show="notifForm.config.method === 'token'" class="text-red-500">*</span></label>
+              <input type="text" x-model="notifForm.config.channel"
+                     placeholder="#terraform (optional for webhook)"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Bot username</label>
+              <input type="text" x-model="notifForm.config.username"
+                     placeholder="TGM Bot (optional)"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Icon emoji</label>
+              <input type="text" x-model="notifForm.config.icon_emoji"
+                     placeholder=":terraform: (optional)"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="flex items-end pb-1">
+              <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+                <input type="checkbox" x-model="notifForm.config.verify_ssl" class="rounded">
+                Verify SSL
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Teams config ── -->
+        <div x-show="notifForm.type === 'teams'" class="space-y-3">
+          <!-- Method selector -->
+          <div class="flex gap-4">
+            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+              <input type="radio" x-model="notifForm.config.method" value="webhook" class="accent-blue-600">
+              Incoming Webhook
+            </label>
+            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+              <input type="radio" x-model="notifForm.config.method" value="graph" class="accent-blue-600">
+              Microsoft Graph API
+            </label>
+          </div>
+
+          <!-- Webhook sub-panel -->
+          <div x-show="(notifForm.config.method||'webhook') === 'webhook'" class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Webhook URL <span class="text-red-500">*</span></label>
+              <input type="password" x-model="notifForm.config.webhook_url"
+                     :placeholder="notifEditId && notifForm.config.webhook_url === '***' ? '●●●●●●●● (saved)' : 'https://xxx.webhook.office.com/webhookb2/...'"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <!-- Graph API sub-panel -->
+          <div x-show="notifForm.config.method === 'graph'" class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Tenant ID <span class="text-red-500">*</span></label>
+                <input type="password" x-model="notifForm.config.tenant_id"
+                       :placeholder="notifEditId && notifForm.config.tenant_id === '***' ? '●●●●●●●● (saved)' : 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'"
+                       class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Client ID <span class="text-red-500">*</span></label>
+                <input type="password" x-model="notifForm.config.client_id"
+                       :placeholder="notifEditId && notifForm.config.client_id === '***' ? '●●●●●●●● (saved)' : 'App (client) ID'"
+                       class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Client Secret <span class="text-red-500">*</span></label>
+              <input type="password" x-model="notifForm.config.client_secret"
+                     :placeholder="notifEditId && notifForm.config.client_secret === '***' ? '●●●●●●●● (saved)' : 'App client secret value'"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Team ID <span class="text-red-500">*</span></label>
+                <input type="text" x-model="notifForm.config.team_id"
+                       placeholder="Teams group/team object ID"
+                       class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Channel ID <span class="text-red-500">*</span></label>
+                <input type="text" x-model="notifForm.config.channel_id"
+                       placeholder="Teams channel object ID"
+                       class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              </div>
+            </div>
+            <p class="text-xs text-gray-500">The app registration must have the <code>ChannelMessage.Send</code> Graph permission (application type).</p>
+          </div>
+
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" x-model="notifForm.config.verify_ssl" class="rounded">
+            Verify SSL certificate
+          </label>
+        </div>
+
+
+        <!-- ── Email/SMTP config ── -->
+        <div x-show="notifForm.type === 'email'" class="space-y-3">
+          <div class="grid grid-cols-3 gap-3">
+            <div class="col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Host <span class="text-red-500">*</span></label>
+              <input type="text" x-model="notifForm.config.smtp_host"
+                     placeholder="smtp.example.com"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Port</label>
+              <input type="number" x-model.number="notifForm.config.smtp_port"
+                     placeholder="587"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">From address <span class="text-red-500">*</span></label>
+              <input type="email" x-model="notifForm.config.from_address"
+                     placeholder="tgm@example.com"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">To address(es) <span class="text-red-500">*</span></label>
+              <input type="text" x-model="notifForm.config.to_addresses"
+                     placeholder="ops@example.com, team@example.com"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Username</label>
+              <input type="text" x-model="notifForm.config.smtp_username"
+                     placeholder="(optional)"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Password</label>
+              <input type="password" x-model="notifForm.config.smtp_password"
+                     placeholder="(optional)"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <div class="flex gap-4">
+            <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+              <input type="checkbox" x-model="notifForm.config.use_starttls" class="rounded">
+              STARTTLS
+            </label>
+            <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+              <input type="checkbox" x-model="notifForm.config.use_ssl" class="rounded">
+              SSL/TLS
+            </label>
+          </div>
+        </div>
+
+        <!-- ── PagerDuty config ── -->
+        <div x-show="notifForm.type === 'pagerduty'" class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Routing Key <span class="text-red-500">*</span></label>
+            <input type="text" x-model="notifForm.config.routing_key"
+                   placeholder="Events API v2 Integration Key"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+              <select x-model="notifForm.config.severity"
+                      class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="critical">Critical</option>
+                <option value="error">Error</option>
+                <option value="warning">Warning</option>
+                <option value="info">Info</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Base URL</label>
+              <input type="url" x-model="notifForm.config.base_url"
+                     placeholder="https://events.pagerduty.com (default)"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" x-model="notifForm.config.verify_ssl" class="rounded">
+            Verify SSL certificate
+          </label>
+        </div>
+
+        <!-- ── Alertmanager config ── -->
+        <div x-show="notifForm.type === 'alertmanager'" class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Alertmanager URL <span class="text-red-500">*</span></label>
+            <input type="url" x-model="notifForm.config.url"
+                   placeholder="http://alertmanager:9093"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+
+          <!-- Auth type -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Authentication</label>
+            <div class="flex gap-4">
+              <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                <input type="radio" x-model="notifForm.config.auth_type" value="none" class="accent-blue-600">
+                None (open)
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                <input type="radio" x-model="notifForm.config.auth_type" value="token" class="accent-blue-600">
+                Bearer token
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                <input type="radio" x-model="notifForm.config.auth_type" value="basic" class="accent-blue-600">
+                Basic (user / password)
+              </label>
+            </div>
+          </div>
+
+          <!-- Token sub-panel -->
+          <div x-show="notifForm.config.auth_type === 'token'">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Bearer Token <span class="text-red-500">*</span></label>
+            <input type="password" x-model="notifForm.config.token"
+                   :placeholder="notifEditId && notifForm.config.token === '***' ? '\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf (saved)' : 'eyJhb...'"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+
+          <!-- Basic auth sub-panel -->
+          <div x-show="notifForm.config.auth_type === 'basic'" class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Username <span class="text-red-500">*</span></label>
+              <input type="text" x-model="notifForm.config.username"
+                     placeholder="admin"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Password <span class="text-red-500">*</span></label>
+              <input type="password" x-model="notifForm.config.password"
+                     :placeholder="notifEditId && notifForm.config.password === '***' ? '\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf (saved)' : ''"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+              <select x-model="notifForm.config.severity"
+                      class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="critical">Critical</option>
+                <option value="error">Error</option>
+                <option value="warning">Warning</option>
+                <option value="info">Info</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Generator URL</label>
+              <input type="url" x-model="notifForm.config.generator_url"
+                     placeholder="http://localhost:5005 (optional)"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" x-model="notifForm.config.verify_ssl" class="rounded">
+            Verify SSL certificate
+          </label>
+        </div>
+
+        <!-- Scope -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Scope</label>
+          <div class="flex gap-4">
+            <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+              <input type="radio" x-model="notifForm.scope" value="workspace" class="accent-blue-600">
+              This workspace only
+            </label>
+            <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+              <input type="radio" x-model="notifForm.scope" value="global" class="accent-blue-600">
+              Global (all workspaces)
+            </label>
+          </div>
+        </div>
+
+        <!-- Enabled toggle -->
+        <div class="flex items-center gap-3">
+          <label class="text-sm font-medium text-gray-700">Enabled</label>
+          <button @click="notifForm.enabled = !notifForm.enabled"
+                  :class="notifForm.enabled ? 'bg-blue-600' : 'bg-gray-200'"
+                  class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none">
+            <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform"
+                  :class="notifForm.enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"></span>
+          </button>
+        </div>
+
+        <!-- Triggers -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Notify on</label>
+          <div class="flex flex-wrap gap-4">
+            <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+              <input type="checkbox" value="on_success"
+                     :checked="notifForm.notify_on.includes('on_success')"
+                     @change="e => e.target.checked ? notifForm.notify_on.push('on_success') : notifForm.notify_on.splice(notifForm.notify_on.indexOf('on_success'),1)"
+                     class="rounded accent-green-600">
+              Success
+            </label>
+            <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+              <input type="checkbox" value="on_failure"
+                     :checked="notifForm.notify_on.includes('on_failure')"
+                     @change="e => e.target.checked ? notifForm.notify_on.push('on_failure') : notifForm.notify_on.splice(notifForm.notify_on.indexOf('on_failure'),1)"
+                     class="rounded accent-red-600">
+              Failure
+            </label>
+            <label class="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+              <input type="checkbox" value="on_sentinel_fail"
+                     :checked="notifForm.notify_on.includes('on_sentinel_fail')"
+                     @change="e => e.target.checked ? notifForm.notify_on.push('on_sentinel_fail') : notifForm.notify_on.splice(notifForm.notify_on.indexOf('on_sentinel_fail'),1)"
+                     class="rounded accent-orange-600">
+              Sentinel policy fail
+            </label>
+          </div>
+        </div>
+
+        <!-- Prefix template -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Prefix template</label>
+          <input type="text" x-model="notifForm.prefix_template"
+                 placeholder="[TGM] [{workspace_name}]"
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <p class="text-xs text-gray-400 mt-1">
+            Variables: <code>{workspace_name}</code> <code>{workspace_id}</code> <code>{command}</code> <code>{status}</code>
+          </p>
+        </div>
+
+        <!-- Body template -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Body template</label>
+          <textarea x-model="notifForm.body_template" rows="4"
+                    placeholder="Leave blank to use the default message body."
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          <p class="text-xs text-gray-400 mt-1">
+            Additional variables: <code>{duration}</code> <code>{timestamp}</code> <code>{terraform_version}</code>
+            <code>{sentinel_status}</code> <code>{sentinel_summary}</code>
+          </p>
+        </div>
+
+        <!-- Error message -->
+        <p x-show="notifSaveError" x-text="notifSaveError"
+           class="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></p>
+      </div>
+
+      <!-- Footer -->
+      <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+        <button @click="notifModalOpen = false"
+                class="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+          Cancel
+        </button>
+        <button @click="saveNotifChannel()"
+                :disabled="notifSaving"
+                class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+          <svg x-show="notifSaving" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+          </svg>
+          <span x-text="notifEditId ? 'Save Changes' : 'Create Channel'"></span>
+        </button>
+      </div>
+    </div>
+  </div><!-- /modal notifications -->
+
+  <!-- ================================================================
        MODAL: STATE VIEWER
        ================================================================ -->
-  <div x-show="stateModalOpen" x-transition.opacity
+  <div x-show="stateModalOpen" x-cloak x-transition.opacity
        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
        @click="stateModalOpen = false"
        @keydown.escape.window="stateModalOpen = false">
@@ -2755,13 +3687,95 @@
     </div>
   </div><!-- /state modal -->
 
+  <!-- ================================================================
+       MANUAL LOCK MODAL
+       ================================================================ -->
+  <div x-show="wsManualLockOpen" x-cloak
+       x-transition:enter="transition ease-out duration-150"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-100"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       @keydown.escape.window="if (!wsManualLockSubmitting) wsManualLockOpen = false"
+       class="fixed inset-0 z-50 flex items-center justify-center">
+    <!-- backdrop -->
+    <div class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm"
+         @click="if (!wsManualLockSubmitting) wsManualLockOpen = false"></div>
+    <!-- panel -->
+    <div class="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
+      <div class="flex items-center space-x-3 mb-5">
+        <div class="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-lg font-semibold text-gray-900">Lock workspace</h2>
+          <p class="text-sm text-gray-500">Plan / Apply / Destroy will be blocked until unlocked.</p>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">
+            Reason <span class="text-red-500">*</span>
+          </label>
+          <textarea x-model="wsManualLockReason"
+                    rows="3"
+                    placeholder="e.g. Maintenance in progress, do not deploy…"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm
+                           focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent
+                           resize-none disabled:opacity-50"
+                    :disabled="wsManualLockSubmitting"
+                    @keydown.enter.meta="submitManualLock()"></textarea>
+          <p class="mt-1 text-xs text-gray-400">This message will appear in the lock banner and the workspace overview.</p>
+        </div>
+
+        <div x-show="wsManualLockError"
+             class="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700"
+             x-text="wsManualLockError"></div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-3 mt-6">
+        <button @click="wsManualLockOpen = false"
+                :disabled="wsManualLockSubmitting"
+                class="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900
+                       border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors
+                       disabled:opacity-50">
+          Cancel
+        </button>
+        <button @click="submitManualLock()"
+                :disabled="!wsManualLockReason.trim() || wsManualLockSubmitting"
+                class="flex items-center space-x-2 px-4 py-2 text-sm font-semibold
+                       bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors
+                       disabled:opacity-50 disabled:cursor-not-allowed">
+          <svg x-show="wsManualLockSubmitting" class="w-4 h-4 animate-spin"
+               fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <svg x-show="!wsManualLockSubmitting" class="w-4 h-4"
+               fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+          </svg>
+          <span x-text="wsManualLockSubmitting ? 'Locking…' : 'Lock workspace'"></span>
+        </button>
+      </div>
+    </div>
+  </div><!-- /manual lock modal -->
+
 </div><!-- /x-data workspacePage -->
 
 {% endblock %}
 
 {% block scripts %}
+<!-- Chart.js for overview statistics charts -->
+<script src="{{ url_for('static', filename='js/vendors/chart.umd.min.js') }}"></script>
 <!-- D3.js for graph -->
-<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="{{ url_for('static', filename='js/vendors/d3.v7.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/graph.js') }}"></script>
 
 <script>
@@ -3305,13 +4319,506 @@ function workspacePage(workspaceId) {
     destroyConfirmText: '',
     destroySubmitting: false,
     destroyError: null,
+    // Workspace execution lock
+    wsLock: null,          // lock object from storage, or null
+    wsLockForeign: false,  // true when lock execution_id is not in our runList
+    wsLockTimer: null,
+    wsLockUnlocking: false,
+    // Manual lock modal
+    wsManualLockOpen: false,
+    wsManualLockReason: '',
+    wsManualLockSubmitting: false,
+    wsManualLockError: null,
+    // Execution statistics charts
+    wsStats: [],
+    wsStatsLoading: false,
+    _chartDuration: null,
+    _chartResources: null,
+    // Per-workspace metrics export toggle
+    wsMetricsEnabled: true,
+    wsMetricsSaving: false,
+    // GitHub token check
+    githubTokenCheck: null,
+    // Notifications
+    notifChannels: [],
+    notifLoading: false,
+    notifAllGlobal: [],
+    notifModalOpen: false,
+    notifEditId: null,
+    notifForm: {},
+    notifSaving: false,
+    notifSaveError: null,
+    notifDeleting: null,
+    notifTesting: null,
+    notifTestResult: {},
+    notifAssigning: null,
 
     async init() {
       this.setupSocket();
       this.loadVersions();
+      this.startWsLockPoll();
+      this.loadWsStats();
+      this.loadWsMetrics();
+      this.loadGithubTokenCheck();
       if (this.activeTab === 'runs') this.loadRuns();
       if (this.activeTab === 'sentinel') this.loadSentinelConfig();
       {% if workspace.has_git %}if (this.activeTab === 'overview' || !this.activeTab) this.loadGitRefs();{% endif %}
+    },
+
+    // ── Workspace execution lock polling ──────────────────────────────
+    async checkWsLock() {
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/execution-lock`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.locked && data.lock) {
+          this.wsLock = data.lock;
+          const knownIds = this.runList.map(r => r.id);
+          this.wsLockForeign = !knownIds.includes(data.lock.execution_id);
+        } else {
+          this.wsLock = null;
+          this.wsLockForeign = false;
+          // Reload runs when lock clears so we pick up the finished run.
+          if (this.activeTab === 'runs') this.loadRuns();
+        }
+      } catch (_) { /* ignore network errors */ }
+    },
+
+    startWsLockPoll() {
+      this.checkWsLock();
+      this.wsLockTimer = setInterval(() => this.checkWsLock(), 5000);
+    },
+
+    async forceUnlockWs() {
+      if (this.wsLockUnlocking) return;
+      this.wsLockUnlocking = true;
+      try {
+        await fetch(`/api/workspace/${workspaceId}/execution-lock`, { method: 'DELETE' });
+        this.wsLock = null;
+        this.wsLockForeign = false;
+      } catch (_) { /* ignore */ } finally {
+        this.wsLockUnlocking = false;
+      }
+    },
+
+    openManualLockModal() {
+      this.wsManualLockReason = '';
+      this.wsManualLockError = null;
+      this.wsManualLockOpen = true;
+    },
+
+    async submitManualLock() {
+      const reason = this.wsManualLockReason.trim();
+      if (!reason) { this.wsManualLockError = 'El motivo es obligatorio.'; return; }
+      this.wsManualLockSubmitting = true;
+      this.wsManualLockError = null;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/execution-lock`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.wsManualLockError = data.error || `HTTP ${res.status}`;
+          return;
+        }
+        this.wsLock = data.lock;
+        this.wsLockForeign = false;
+        this.wsManualLockOpen = false;
+      } catch (e) {
+        this.wsManualLockError = e.message;
+      } finally {
+        this.wsManualLockSubmitting = false;
+      }
+    },
+
+    // ── Per-workspace metrics toggle ───────────────────────────────────
+    async loadWsMetrics() {
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/metrics-config`);
+        if (res.ok) {
+          const d = await res.json();
+          this.wsMetricsEnabled = d.metrics_enabled !== false;
+        }
+      } catch (_) {}
+    },
+
+    async toggleWsMetrics(val) {
+      this.wsMetricsEnabled = val;
+      this.wsMetricsSaving = true;
+      try {
+        await fetch(`/api/workspace/${workspaceId}/metrics-config`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({metrics_enabled: val}),
+        });
+      } catch (_) {}
+      this.wsMetricsSaving = false;
+    },
+
+    // ── Notification channels ──────────────────────────────────────────
+    _notifFormDefaults() {
+      return {
+        name: '',
+        type: 'slack',
+        enabled: true,
+        scope: 'workspace',
+        notify_on: ['on_failure', 'on_sentinel_fail'],
+        prefix_template: '[TGM] [{workspace_name}]',
+        body_template: '',
+        config: {
+          // slack
+          method: 'webhook', webhook_url: '', token: '',
+          channel: '', username: '', icon_emoji: '', verify_ssl: true,
+          // teams graph
+          tenant_id: '', client_id: '', client_secret: '',
+          team_id: '', channel_id: '',
+          // email
+          smtp_host: '', smtp_port: 587, from_address: '', to_addresses: '',
+          smtp_username: '', smtp_password: '', use_starttls: true, use_ssl: false,
+          // pagerduty
+          routing_key: '', severity: 'error', base_url: '',
+          // alertmanager
+          url: '', auth_type: 'none', password: '', generator_url: '',
+        },
+      };
+    },
+
+    openNotifCreate() {
+      this.notifEditId = null;
+      this.notifSaveError = null;
+      this.notifForm = this._notifFormDefaults();
+      this.notifModalOpen = true;
+    },
+
+    openNotifEdit(ch) {
+      this.notifEditId = ch.id;
+      this.notifSaveError = null;
+      this.notifForm = {
+        name: ch.name || '',
+        type: ch.type || 'slack',
+        enabled: ch.enabled !== false,
+        scope: (ch.workspace_ids || []).includes('*') ? 'global' : 'workspace',
+        notify_on: [...(ch.notify_on || [])],
+        prefix_template: ch.prefix_template || '[TGM] [{workspace_name}]',
+        body_template: ch.body_template || '',
+        config: Object.assign({
+          // slack
+          method: 'webhook', webhook_url: '', token: '',
+          channel: '', username: '', icon_emoji: '', verify_ssl: true,
+          // teams graph
+          tenant_id: '', client_id: '', client_secret: '',
+          team_id: '', channel_id: '',
+          // email
+          smtp_host: '', smtp_port: 587, from_address: '', to_addresses: '',
+          smtp_username: '', smtp_password: '', use_starttls: true, use_ssl: false,
+          // pagerduty
+          routing_key: '', severity: 'error', base_url: '',
+          // alertmanager
+          url: '', auth_type: 'none', password: '', generator_url: '',
+        }, ch.config || {}),
+      };
+      this.notifModalOpen = true;
+    },
+
+    notifTypeChange() {
+      // Reset type-specific config fields when type changes; preserve non-sensitive shared keys
+      const keep = {verify_ssl: this.notifForm.config.verify_ssl, method: 'webhook', auth_type: 'none'};
+      this.notifForm.config = Object.assign({
+        // slack
+        webhook_url: '', token: '',
+        channel: '', username: '', icon_emoji: '',
+        // teams graph
+        tenant_id: '', client_id: '', client_secret: '',
+        team_id: '', channel_id: '',
+        // email
+        smtp_host: '', smtp_port: 587, from_address: '', to_addresses: '',
+        smtp_username: '', smtp_password: '', use_starttls: true, use_ssl: false,
+        // pagerduty
+        routing_key: '', severity: 'error', base_url: '',
+        // alertmanager
+        url: '', password: '', generator_url: '',
+      }, keep);
+    },
+
+    async loadNotifChannels() {
+      this.notifLoading = true;
+      try {
+        const [wsRes, allRes] = await Promise.all([
+          fetch(`/api/workspace/${workspaceId}/notification-channels`),
+          fetch(`/api/notification-channels?workspace_id=${workspaceId}`),
+        ]);
+        if (wsRes.ok)  this.notifChannels  = (await wsRes.json()).channels  || [];
+        if (allRes.ok) {
+          const all = (await allRes.json()).channels || [];
+          this.notifAllGlobal = all.filter(c => (c.workspace_ids||[]).includes('*') && !this.notifChannels.map(x=>x.id).includes(c.id));
+        }
+      } catch (_) {}
+      this.notifLoading = false;
+    },
+
+    async saveNotifChannel() {
+      if (!this.notifForm.name.trim()) {
+        this.notifSaveError = 'Channel name is required.';
+        return;
+      }
+      this.notifSaveError = null;
+      this.notifSaving = true;
+      const payload = {
+        ...this.notifForm,
+        workspace_ids: this.notifForm.scope === 'global' ? ['*'] : [workspaceId],
+      };
+      try {
+        let res;
+        if (this.notifEditId) {
+          res = await fetch(`/api/notification-channels/${this.notifEditId}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+          });
+        } else {
+          res = await fetch('/api/notification-channels', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+          });
+        }
+        if (res.ok) {
+          this.notifModalOpen = false;
+          await this.loadNotifChannels();
+        } else {
+          const d = await res.json().catch(() => ({}));
+          this.notifSaveError = d.error || 'Failed to save channel.';
+        }
+      } catch (_) {
+        this.notifSaveError = 'Network error — channel not saved.';
+      }
+      this.notifSaving = false;
+    },
+
+    async deleteNotifChannel(ch) {
+      const isGlobal = (ch.workspace_ids || []).includes('*');
+      const msg = isGlobal
+        ? `Remove global channel "${ch.name}" from this workspace?`
+        : `Delete channel "${ch.name}"? This cannot be undone.`;
+      if (!confirm(msg)) return;
+      this.notifDeleting = ch.id;
+      try {
+        let res;
+        if (isGlobal) {
+          res = await fetch(`/api/workspace/${workspaceId}/notification-channels/unassign`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({channel_id: ch.id}),
+          });
+        } else {
+          res = await fetch(`/api/notification-channels/${ch.id}`, {method: 'DELETE'});
+        }
+        if (res.ok) await this.loadNotifChannels();
+      } catch (_) {}
+      this.notifDeleting = null;
+    },
+
+    async testNotifChannel(ch) {
+      this.notifTesting = ch.id;
+      this.notifTestResult = {...this.notifTestResult, [ch.id]: null};
+      try {
+        const res = await fetch(`/api/notification-channels/${ch.id}/test`, {method: 'POST'});
+        const d = await res.json().catch(() => ({}));
+        this.notifTestResult = {...this.notifTestResult, [ch.id]: {ok: res.ok, msg: d.message || d.error || ''}};
+        setTimeout(() => {
+          this.notifTestResult = {...this.notifTestResult, [ch.id]: null};
+        }, 5000);
+      } catch (_) {
+        this.notifTestResult = {...this.notifTestResult, [ch.id]: {ok: false, msg: 'Network error'}};
+      }
+      this.notifTesting = null;
+    },
+
+    async assignGlobalChannel(channelId) {
+      this.notifAssigning = channelId;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/notification-channels/assign`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({channel_id: channelId}),
+        });
+        if (res.ok) await this.loadNotifChannels();
+      } catch (_) {}
+      this.notifAssigning = null;
+    },
+
+    // ── GitHub token check ────────────────────────────────────────────
+    async loadGithubTokenCheck() {
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/github-token-check`);
+        if (res.ok) {
+          this.githubTokenCheck = await res.json();
+        }
+      } catch (_) {}
+    },
+
+    // ── Execution statistics charts ────────────────────────────────────
+    async loadWsStats() {
+      this.wsStatsLoading = true;
+      try {
+        const res = await fetch(`/api/workspace/${workspaceId}/stats`);
+        if (res.ok) {
+          const d = await res.json();
+          this.wsStats = d.series || [];
+          if (this.activeTab === 'overview' || this.activeTab === '') {
+            this.$nextTick(() => this._renderDurationChart());
+            this.$nextTick(() => this._renderResourcesChart());
+          }
+        }
+      } catch (_) {}
+      this.wsStatsLoading = false;
+    },
+
+    _renderDurationChart() {
+      if (typeof Chart === 'undefined') return;
+      const ctx = this.$refs.chartDuration;
+      if (!ctx) return;
+      if (this._chartDuration) { this._chartDuration.destroy(); this._chartDuration = null; }
+      const data = this.wsStats;
+      if (!data.length) return;
+      const fmt = ts => {
+        const d = new Date(ts);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+      };
+      const labels = data.map(s => fmt(s.timestamp));
+      const ds = (label, color, key) => ({
+        label,
+        data: data.map(s => s.command === key ? (s.duration_seconds ?? null) : null),
+        borderColor: color, pointBackgroundColor: color,
+        borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
+        tension: 0.35, spanGaps: false, fill: false,
+      });
+      this._chartDuration = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            ds('Plan',    '#5c4ee5', 'plan'),
+            ds('Apply',   '#10b981', 'apply'),
+            ds('Destroy', '#ef4444', 'destroy'),
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'top', align: 'end',
+              labels: { usePointStyle: true, pointStyleWidth: 8, boxHeight: 8,
+                        font: { family: 'Inter', size: 11 }, padding: 14 },
+            },
+            tooltip: {
+              callbacks: {
+                label: c => c.parsed.y !== null ? ` ${c.dataset.label}: ${c.parsed.y}s` : null,
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(0,0,0,0.04)' },
+              ticks: { font: { family: 'Inter', size: 10 }, color: '#9ca3af',
+                       maxTicksLimit: 6, maxRotation: 0 },
+              border: { color: 'rgba(0,0,0,0.08)' },
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(0,0,0,0.04)' },
+              ticks: { font: { family: 'Inter', size: 10 }, color: '#9ca3af',
+                       callback: v => v + 's' },
+              border: { color: 'rgba(0,0,0,0.08)' },
+            },
+          },
+        },
+      });
+    },
+
+    _renderResourcesChart() {
+      if (typeof Chart === 'undefined') return;
+      const ctx = this.$refs.chartResources;
+      if (!ctx) return;
+      if (this._chartResources) { this._chartResources.destroy(); this._chartResources = null; }
+
+      // For plan: projected total after applying = no-op + create + update + replace
+      // (resources that will still exist after the plan is applied; excludes deletes)
+      const planProjected = rc => rc
+        ? (rc['no-op'] ?? 0) + (rc.create ?? 0) + (rc.update ?? 0) + (rc.replace ?? 0)
+        : null;
+
+      // Build combined dataset: plan entries + apply entries that have a usable count
+      const withData = this.wsStats.filter(s =>
+        (s.command === 'plan' && s.resource_counts) ||
+        (s.command === 'apply' && s.state_resource_count != null)
+      );
+      if (!withData.length) return;
+
+      const fmt = ts => {
+        const d = new Date(ts);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+      };
+
+      const labels = withData.map(s => fmt(s.timestamp));
+      const defaultOpts = {
+        borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
+        tension: 0.35, spanGaps: false, fill: false,
+      };
+
+      this._chartResources = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { ...defaultOpts, label: 'Plan (projected)',
+              data: withData.map(s => s.command === 'plan' ? planProjected(s.resource_counts) : null),
+              borderColor: '#6366f1', pointBackgroundColor: '#6366f1',
+              borderDash: [5, 3] },
+            { ...defaultOpts, label: 'Apply (actual)',
+              data: withData.map(s => s.command === 'apply' ? s.state_resource_count : null),
+              borderColor: '#10b981', pointBackgroundColor: '#10b981' },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'top', align: 'end',
+              labels: { usePointStyle: true, pointStyleWidth: 8, boxHeight: 8,
+                        font: { family: 'Inter', size: 11 }, padding: 14 },
+            },
+            tooltip: {
+              callbacks: {
+                label: c => c.parsed.y !== null
+                  ? ` ${c.dataset.label}: ${c.parsed.y} resources`
+                  : null,
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(0,0,0,0.04)' },
+              ticks: { font: { family: 'Inter', size: 10 }, color: '#9ca3af',
+                       maxTicksLimit: 6, maxRotation: 0 },
+              border: { color: 'rgba(0,0,0,0.08)' },
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(0,0,0,0.04)' },
+              ticks: { font: { family: 'Inter', size: 10 }, color: '#9ca3af',
+                       precision: 0 },
+              border: { color: 'rgba(0,0,0,0.08)' },
+            },
+          },
+        },
+      });
     },
 
     // ── Runs pagination getters ────────────────────────────────────────
@@ -3366,8 +4873,9 @@ function workspacePage(workspaceId) {
       if (tab === 'graph')  this.loadGraph();
       if (tab === 'runs' && !this.runsLoaded) this.loadRuns();
       if (tab === 'sentinel') this.loadSentinelConfig();
+      if (tab === 'notifications') this.loadNotifChannels();
       if (tab === 'vars') window.dispatchEvent(new CustomEvent('tgm-load-vars'));
-      {% if workspace.has_git %}if (tab === 'overview') this.loadGitRefs();{% endif %}
+      if (tab === 'overview') { this.loadWsStats(); this.loadGithubTokenCheck(); {% if workspace.has_git %}this.loadGitRefs();{% endif %} }
     },
 
     setupSocket() {
@@ -3679,6 +5187,7 @@ function workspacePage(workspaceId) {
         } else {
           this.applyPreviewStep = 'plan_failed';
           this.applyPreviewError = data.error || 'Failed to start plan.';
+          if (res.status === 423) await this.checkWsLock();
         }
       } catch (e) {
         this.applyPreviewStep = 'plan_failed';
@@ -3779,6 +5288,7 @@ function workspacePage(workspaceId) {
         if (!res.ok) {
           this.applyPreviewStep = 'ready';
           this.applyPreviewError = data.error || `HTTP ${res.status}`;
+          if (res.status === 423) await this.checkWsLock();
           return;
         }
         if (data.execution_id) {
@@ -3813,6 +5323,11 @@ function workspacePage(workspaceId) {
           body: JSON.stringify({ command: 'destroy' }),
         });
         const data = await res.json();
+        if (res.status === 423) {
+          this.destroyError = data.error || 'Workspace is locked.';
+          await this.checkWsLock();
+          return;
+        }
         if (data.execution_id) {
           this.destroyConfirmText = '';
           this.activeTab = 'runs';
@@ -3853,7 +5368,10 @@ function workspacePage(workspaceId) {
           body: JSON.stringify(body),
         });
         const data = await res.json();
-        if (data.execution_id) {
+        if (res.status === 423) {
+          // Workspace locked — refresh lock state so banner appears.
+          await this.checkWsLock();
+        } else if (data.execution_id) {
           this.latestPlanExecId = data.execution_id;
           this.modalOpen = false;
           this.activeTab = 'runs';

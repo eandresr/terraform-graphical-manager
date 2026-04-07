@@ -14,76 +14,44 @@ def dashboard():
     flat = scanner.get_flat_list()
     total = len(flat)
 
-    eq = current_app.config["EXECUTION_QUEUE"]
-
-    # ---- Gather all executions (in-memory + storage), dedup by id ----
-    all_execs: dict = {}
-    for ex in eq.list_all():
-        d = ex.to_dict()
-        d["workspace_path"] = ex.workspace_path  # to_dict() omits this
-        all_execs[ex.id] = d
-
-    try:
-        from app.storage import get_backend
-        backend = get_backend()
-        for meta in backend.list_all_executions():
-            eid = meta.get("id")
-            if eid and eid not in all_execs:
-                all_execs[eid] = meta
-    except Exception:
-        backend = None
-    else:
-        backend = get_backend()
-
-    # ---- Stats ----
-    total_plans = sum(1 for e in all_execs.values() if e.get("command") == "plan")
-    total_applies = sum(1 for e in all_execs.values() if e.get("command") == "apply")
-    total_errored = sum(1 for e in all_execs.values() if e.get("status") == "failed")
-
-    # ---- Errored workspaces: workspace whose LATEST run is failed ----
-    ws_latest: dict = {}
-    for e in all_execs.values():
-        wid = e.get("workspace_id")
-        if not wid:
-            continue
-        if wid not in ws_latest or e.get("timestamp", "") > ws_latest[wid].get("timestamp", ""):
-            ws_latest[wid] = e
-
-    errored_workspaces = []
-    for wid, e in ws_latest.items():
-        if e.get("status") != "failed":
-            continue
-        error_snippet = ""
-        if backend:
-            try:
-                logs = backend.get_logs(wid, e.get("timestamp", ""), e.get("command", "plan"))
-                if logs:
-                    lines = [ln for ln in logs.strip().splitlines() if ln.strip()]
-                    error_snippet = "\n".join(lines[-5:])
-            except Exception:
-                pass
-        wp = e.get("workspace_path", "") or wid
-        errored_workspaces.append({
-            "workspace_id": wid,
-            "workspace_path": wp,
-            "workspace_name": wp.rstrip("/").split("/")[-1] or wid,
-            "execution_id": e.get("id", ""),
-            "command": e.get("command", "plan"),
-            "timestamp": e.get("timestamp", ""),
-            "error_snippet": error_snippet,
-        })
-    errored_workspaces.sort(key=lambda x: x["timestamp"], reverse=True)
+    # GitHub-token warnings from in-memory cache (populated on startup + workspace opens)
+    from app.github_module_checker import get_all_warnings as _gh_warnings
+    github_token_warnings = _gh_warnings()
 
     return render_template(
         "dashboard.html",
         total_workspaces=total,
+        flat_workspaces=flat,
         repos_root=config.repos_root,
-        total_plans=total_plans,
-        total_applies=total_applies,
-        total_errored=total_errored,
-        errored_workspaces=errored_workspaces,
-        ws_latest=ws_latest,
+        github_token_warnings=github_token_warnings,
     )
+
+
+@workspace_bp.route("/notifications")
+def notifications_global():
+    config = current_app.config["TFG_CONFIG"]
+    return render_template("notifications_global.html", config=config)
+
+
+@workspace_bp.route("/metrics")
+def metrics_global():
+    config = current_app.config["TFG_CONFIG"]
+    return render_template("metrics_global.html", config=config)
+
+
+@workspace_bp.route("/api-docs")
+def api_docs():
+    config = current_app.config["TFG_CONFIG"]
+    has_portal = bool(config.lock_password_hash)
+    return render_template("api_docs.html", config=config, has_portal=has_portal)
+
+
+@workspace_bp.route("/variable-groups")
+def variable_groups_global():
+    config = current_app.config["TFG_CONFIG"]
+    scanner = WorkspaceScanner(config.repos_root)
+    flat = scanner.get_flat_list()
+    return render_template("variable_groups.html", config=config, flat_workspaces=flat)
 
 
 @workspace_bp.route("/workspace/<workspace_id>")
@@ -111,6 +79,24 @@ def workspace_detail(workspace_id: str):
         discover_policy_sets(sentinel_extra_policies) if sentinel_extra_policies else []
     )
     global_policy_sets = discover_policy_sets(config.sentinel_global_policies)
+
+    # Trigger a fresh GitHub-module / token check for this workspace and
+    # refresh the cache entry so the dashboard reflects the current state.
+    import threading as _threading
+    from app.github_module_checker import check_workspace as _check_ws
+
+    def _bg_check():
+        try:
+            _check_ws(
+                workspace_id,
+                workspace["abs_path"],
+                workspace["name"],
+                workspace["relative_path"],
+            )
+        except Exception:
+            pass
+
+    _threading.Thread(target=_bg_check, daemon=True, name=f"gh-check-{workspace_id[:8]}").start()
 
     return render_template(
         "workspace.html",

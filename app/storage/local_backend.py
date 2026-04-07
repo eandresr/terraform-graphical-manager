@@ -158,6 +158,26 @@ class LocalBackend:
         self._write_json(os.path.join(ws_dir, "workspace_config.json"), config)
 
     # ------------------------------------------------------------------
+    # Per-workspace execution lock
+    # ------------------------------------------------------------------
+
+    def get_execution_lock(self, workspace_id: str) -> Optional[Dict[str, Any]]:
+        path = os.path.join(self._root, "workspaces", workspace_id, "execution_lock.json")
+        return self._read_json(path)
+
+    def set_execution_lock(self, workspace_id: str, lock_data: Dict[str, Any]) -> None:
+        ws_dir = os.path.join(self._root, "workspaces", workspace_id)
+        os.makedirs(ws_dir, exist_ok=True)
+        self._write_json(os.path.join(ws_dir, "execution_lock.json"), lock_data)
+
+    def clear_execution_lock(self, workspace_id: str) -> None:
+        path = os.path.join(self._root, "workspaces", workspace_id, "execution_lock.json")
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+    # ------------------------------------------------------------------
     # Per-workspace Sentinel last result
     # ------------------------------------------------------------------
 
@@ -216,6 +236,42 @@ class LocalBackend:
         except OSError:
             pass
 
+    # ------------------------------------------------------------------
+    # Notification Channels
+    # ------------------------------------------------------------------
+
+    def list_notification_channels(self) -> List[Dict[str, Any]]:
+        nc_dir = os.path.join(self._root, "notification_channels")
+        results: List[Dict[str, Any]] = []
+        if not os.path.isdir(nc_dir):
+            return results
+        for entry in os.scandir(nc_dir):
+            if entry.is_file() and entry.name.endswith(".json"):
+                data = self._read_json(entry.path)
+                if data:
+                    results.append(data)
+        return sorted(results, key=lambda c: (c.get("name") or "").lower())
+
+    def get_notification_channel(self, channel_id: str) -> Optional[Dict[str, Any]]:
+        path = os.path.join(self._root, "notification_channels", f"{channel_id}.json")
+        return self._read_json(path)
+
+    def save_notification_channel(
+        self, channel_id: str, data: Dict[str, Any]
+    ) -> None:
+        nc_dir = os.path.join(self._root, "notification_channels")
+        os.makedirs(nc_dir, exist_ok=True)
+        self._write_json(os.path.join(nc_dir, f"{channel_id}.json"), data)
+
+    def delete_notification_channel(self, channel_id: str) -> None:
+        path = os.path.join(
+            self._root, "notification_channels", f"{channel_id}.json"
+        )
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
     def _find_run_dir(self, execution_id: str) -> Optional[str]:
         """Locate the run directory for a given execution UUID."""
         ws_root = os.path.join(self._root, "workspaces")
@@ -245,6 +301,16 @@ class LocalBackend:
 
     @staticmethod
     def _build_metadata(execution) -> Dict[str, Any]:
+        # Compute resource counts from plan_json when available.
+        resource_counts = None
+        plan_json = getattr(execution, "plan_json", None)
+        if plan_json:
+            try:
+                from app.plan_parser import parse_plan
+                resource_counts = parse_plan(plan_json).get("counts")
+            except Exception:
+                pass
+
         return {
             "id": execution.id,
             "workspace_id": execution.workspace_id,
@@ -258,6 +324,10 @@ class LocalBackend:
             "duration_seconds": execution.duration_seconds,
             "sentinel_result": getattr(execution, "sentinel_result", None),
             "run_params": getattr(execution, "run_params", []),
+            "resource_counts": resource_counts,
+            "state_resource_count": getattr(execution, "state_resource_count", None),
+            "git_ref": getattr(execution, "git_ref", None),
+            "git_pull": getattr(execution, "git_pull", False),
         }
 
     @staticmethod

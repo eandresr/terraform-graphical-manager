@@ -1,3 +1,30 @@
+{%- macro provider_chips(providers) -%}
+{%- set colors = {
+  'aws':          'pchip--aws',
+  'google':       'pchip--google',
+  'azurerm':      'pchip--azurerm',
+  'azure':        'pchip--azurerm',
+  'kubernetes':   'pchip--kubernetes',
+  'helm':         'pchip--helm',
+  'github':       'pchip--github',
+  'datadog':      'pchip--datadog',
+  'vault':        'pchip--vault',
+  'oci':          'pchip--oci',
+  'alicloud':     'pchip--alicloud',
+  'ibm':          'pchip--ibm',
+  'cloudflare':   'pchip--cloudflare',
+  'digitalocean': 'pchip--digitalocean',
+  'linode':       'pchip--linode',
+  'vsphere':      'pchip--vsphere',
+  'openstack':    'pchip--openstack',
+  'scaleway':     'pchip--scaleway',
+  'hcloud':       'pchip--hcloud',
+  'ovh':          'pchip--ovh',
+  'exoscale':     'pchip--exoscale'
+} -%}
+{%- for p in providers -%}<span class="pchip {{ colors.get(p, '') }}">{{ p }}</span>{% if not loop.last %} {% endif %}{%- endfor -%}
+{%- endmacro %}
+
 {%- macro provider_code(p) -%}
 {%- set codes = {
   'aws':          'AWS',

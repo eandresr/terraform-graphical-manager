@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "terraform-graphical-manager"
-version = "0.3.0"
+version = "1.1.0"
 description = "A local, open-source Terraform Cloud-like UI for your own machines."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -17,7 +17,7 @@ authors = [
 ]
 keywords = ["terraform", "infrastructure", "devops", "dashboard", "ui"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Web Environment",
     "Framework :: Flask",
     "Intended Audience :: Developers",
@@ -47,6 +47,7 @@ dependencies = [
     "python-dotenv==1.0.1",
     "python-hcl2==4.3.2",
     "requests==2.31.0",
+    "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]

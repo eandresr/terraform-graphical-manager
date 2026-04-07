@@ -147,6 +147,52 @@ def settings_save():
     )
     updates["sentinel.active_policy_sets"] = data.get("sentinel_active_policy_sets", "").strip()
 
+    # --- Metrics export ---
+    updates["metrics.enabled"] = (
+        "true" if data.get("metrics_enabled") == "1" else "false"
+    )
+    updates["metrics.backend"] = data.get("metrics_backend", "").strip().lower()
+    updates["metrics.prefix"] = data.get("metrics_prefix", "tgm").strip()
+    # InfluxDB
+    updates["metrics.influxdb_url"] = data.get("metrics_influxdb_url", "").strip()
+    updates["metrics.influxdb_token"] = data.get("metrics_influxdb_token", "").strip()
+    updates["metrics.influxdb_org"] = data.get("metrics_influxdb_org", "").strip()
+    updates["metrics.influxdb_bucket"] = data.get("metrics_influxdb_bucket", "tgm").strip()
+    updates["metrics.influxdb_verify_ssl"] = (
+        "true" if data.get("metrics_influxdb_verify_ssl") == "1" else "false"
+    )
+    # Prometheus
+    updates["metrics.prometheus_url"] = data.get("metrics_prometheus_url", "").strip()
+    updates["metrics.prometheus_job"] = data.get("metrics_prometheus_job", "tgm").strip()
+    updates["metrics.prometheus_username"] = data.get("metrics_prometheus_username", "").strip()
+    updates["metrics.prometheus_password"] = data.get("metrics_prometheus_password", "").strip()
+    updates["metrics.prometheus_verify_ssl"] = (
+        "true" if data.get("metrics_prometheus_verify_ssl") == "1" else "false"
+    )
+    # Graphite
+    updates["metrics.graphite_host"] = data.get("metrics_graphite_host", "").strip()
+    port_val = data.get("metrics_graphite_port", "2003").strip()
+    updates["metrics.graphite_port"] = port_val if port_val.isdigit() else "2003"
+    proto = data.get("metrics_graphite_protocol", "tcp").strip().lower()
+    updates["metrics.graphite_protocol"] = proto if proto in ("tcp", "udp") else "tcp"
+
+    # --- Run history retention ---
+    retention_mode = data.get("history_retention_mode", "none").strip().lower()
+    if retention_mode not in ("none", "count", "days", "size"):
+        retention_mode = "none"
+    updates["history.retention_mode"] = retention_mode
+
+    retention_count = data.get("history_retention_count", "50").strip()
+    updates["history.retention_count"] = retention_count if retention_count.isdigit() else "50"
+
+    retention_days = data.get("history_retention_days", "90").strip()
+    updates["history.retention_days"] = retention_days if retention_days.isdigit() else "90"
+
+    retention_size_mb = data.get("history_retention_size_mb", "500").strip()
+    updates["history.retention_size_mb"] = (
+        retention_size_mb if retention_size_mb.isdigit() else "500"
+    )
+
     # --- Portal lock password ---
     if data.get("remove_lock_password") == "1":
         updates["security.password_hash"] = ""
@@ -156,12 +202,34 @@ def settings_save():
             from app.auth import hash_password
             from flask import session as _session
             from app.variable_groups import reencrypt_all_sensitive
+            from app.notification_manager import (
+                reencrypt_all_sensitive as reencrypt_all_notif_sensitive,
+            )
             old_enc_key = _session.get("tgm_enc_key", "")
             updates["security.password_hash"] = hash_password(new_password)
             # Re-encrypt all sensitive variables with the new password
             if old_enc_key and old_enc_key != new_password:
                 try:
                     reencrypt_all_sensitive(old_enc_key, new_password)
+                except Exception:
+                    pass
+                try:
+                    reencrypt_all_notif_sensitive(old_enc_key, new_password)
+                except Exception:
+                    pass
+                # Re-encrypt backend credentials
+                try:
+                    from app.backend_config import (
+                        get_backend_config, save_backend_config,
+                        decrypt_fields, encrypt_fields, SENSITIVE_FIELDS,
+                    )
+                    bc = get_backend_config(config)
+                    bt = (bc.get("type") or "").lower().strip()
+                    if bt and SENSITIVE_FIELDS.get(bt):
+                        bc_plain = decrypt_fields(bc, bt, old_enc_key)
+                        bc_reenc = encrypt_fields(bc_plain, bt, new_password)
+                        bc_reenc["type"] = bt
+                        save_backend_config(config, bc_reenc)
                 except Exception:
                     pass
             # Keep the enc_key in session in sync with the new password

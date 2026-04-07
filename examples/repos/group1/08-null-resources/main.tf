@@ -53,7 +53,7 @@ resource "null_resource" "timestamp" {
   }
 
   provisioner "local-exec" {
-    command = "date -u '+%Y-%m-%dT%H:%M:%SZ' > '${local.out}/last_apply.txt' && echo 'Message: ${var.message}' >> '${local.out}/last_apply.txt'"
+    command = "mkdir -p '${local.out}' && date -u '+%Y-%m-%dT%H:%M:%SZ' > '${local.out}/last_apply.txt' && echo 'Message: ${var.message}' >> '${local.out}/last_apply.txt'"
   }
 }
 
@@ -62,8 +62,4 @@ resource "null_resource" "timestamp" {
 # ------------------------------------------------------------------
 resource "terraform_data" "trigger_demo" {
   input = var.message
-
-  lifecycle {
-    replace_triggered_by = [terraform_data.trigger_demo]
-  }
 }

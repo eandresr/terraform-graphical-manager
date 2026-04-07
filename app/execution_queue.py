@@ -67,6 +67,7 @@ class Execution:
         self.plan_binary_path: Optional[str] = None
         self.terraform_version: Optional[str] = None
         self.duration_seconds: Optional[int] = None
+        self.state_resource_count: Optional[int] = None  # resource count from state after apply
         self.terraform_binary: Optional[str] = None  # resolved path to tf binary
         self._workdir: Optional[str] = None  # temp dir for plan artefacts
         self._canceled = threading.Event()
@@ -130,6 +131,7 @@ class Execution:
         obj.plan_binary_path = None
         obj.terraform_version = meta.get("terraform_version")
         obj.duration_seconds = meta.get("duration_seconds")
+        obj.state_resource_count = meta.get("state_resource_count")
         obj.terraform_binary = meta.get("terraform_binary")
         obj.sentinel_result = meta.get("sentinel_result")
         obj.run_params = meta.get("run_params") or []
@@ -150,9 +152,10 @@ class Execution:
 # ---------------------------------------------------------------------------
 
 class ExecutionQueue:
-    def __init__(self, max_workers: int = 3, socketio_instance=None):
+    def __init__(self, max_workers: int = 3, socketio_instance=None, flask_app=None):
         self.max_workers = max_workers
         self._socketio = socketio_instance
+        self._flask_app = flask_app  # needed to push app context in worker threads
         self._queue: queue.Queue = queue.Queue()
         self._executions: Dict[str, Execution] = {}
         self._workers: List[threading.Thread] = []
@@ -187,14 +190,14 @@ class ExecutionQueue:
         self._queue.put(execution)
         return execution.id
 
-    def get(self, execution_id: str) -> Optional[Execution]:
+    def get(self, execution_id: str, enc_key: str = "") -> Optional[Execution]:
         # 1. Check in-memory first
         if execution_id in self._executions:
             return self._executions[execution_id]
         # 2. Fall back to storage
         try:
             from app.storage import get_backend
-            backend = get_backend()
+            backend = get_backend(enc_key)
             meta = backend.get_execution_by_id(execution_id)
             if meta:
                 return Execution.from_metadata(meta)
@@ -206,7 +209,7 @@ class ExecutionQueue:
         with self._lock:
             return list(self._executions.values())
 
-    def list_for_workspace(self, workspace_id: str) -> List[Execution]:
+    def list_for_workspace(self, workspace_id: str, enc_key: str = "") -> List[Execution]:
         # In-memory runs (running/queued/recent)
         with self._lock:
             in_memory = {e.id: e for e in self._executions.values()
@@ -214,7 +217,7 @@ class ExecutionQueue:
         # Historical runs from storage
         try:
             from app.storage import get_backend
-            backend = get_backend()
+            backend = get_backend(enc_key)
             for meta in backend.list_executions(workspace_id):
                 eid = meta.get("id")
                 if eid and eid not in in_memory:
@@ -237,6 +240,22 @@ class ExecutionQueue:
     # ------------------------------------------------------------------
 
     def _worker(self) -> None:
+        # Push a Flask application context for the lifetime of this worker thread
+        # so that current_app, g, and (read-only) config are accessible.
+        # flask.session is NOT available here (no request context) — that is why
+        # enc_key is carried explicitly on the Execution object.
+        if self._flask_app is not None:
+            ctx = self._flask_app.app_context()
+            ctx.push()
+        else:
+            ctx = None
+        try:
+            self._worker_loop()
+        finally:
+            if ctx is not None:
+                ctx.pop()
+
+    def _worker_loop(self) -> None:
         while self._running:
             try:
                 execution = self._queue.get(timeout=1)
@@ -257,6 +276,21 @@ class ExecutionQueue:
 
         execution.status = ExecutionStatus.RUNNING
         self._emit_status(execution)
+
+        # Persist an execution lock so other sessions can detect an active run.
+        try:
+            from app.storage import get_backend as _get_backend
+            _get_backend(execution.enc_key).set_execution_lock(
+                execution.workspace_id,
+                {
+                    "execution_id": execution.id,
+                    "command": execution.command,
+                    "started_at": datetime.datetime.utcnow().isoformat(),
+                    "workspace_id": execution.workspace_id,
+                },
+            )
+        except Exception:
+            pass
 
         start = datetime.datetime.utcnow()
         workdir = tempfile.mkdtemp(prefix=f"tgm-{execution.id[:8]}-")
@@ -298,6 +332,11 @@ class ExecutionQueue:
                 _after = runner.state_pull() or {}
                 snap_after = build_snapshot(_after)
                 self._track_changes(execution, snap_before, snap_after)
+                try:
+                    from app.state_parser import parse_state as _parse_state
+                    execution.state_resource_count = _parse_state(_after).get("resource_count")
+                except Exception:
+                    pass
 
             elif execution.command == "destroy":
                 _before = runner.state_pull() or {}
@@ -334,6 +373,46 @@ class ExecutionQueue:
             self._emit_status(execution)
             # Store BEFORE cleaning up workdir so plan binary is still available
             self._store_execution(execution)
+            # Update the lightweight last-state cache used by the dashboard.
+            try:
+                from app.workspace_state import update as _update_ws_state
+                d = execution.to_dict()
+                d["workspace_path"] = execution.workspace_path
+                _update_ws_state(execution.workspace_id, d)
+            except Exception:
+                pass
+            # Export metrics to the configured backend (best-effort, never breaks run)
+            try:
+                from flask import current_app
+                from app.metrics_exporter import export_execution_metrics
+                _cfg = current_app.config.get("TFG_CONFIG")
+                if _cfg:
+                    _ws_name = (
+                        execution.workspace_path.rstrip("/").split("/")[-1]
+                    )
+                    export_execution_metrics(
+                        execution.to_dict(),
+                        _cfg,
+                        _ws_name,
+                    )
+            except Exception:
+                pass
+            # Send notifications (best-effort, never breaks run)
+            try:
+                from app.notification_manager import send_notifications_for_execution
+                _ws_name_n = execution.workspace_path.rstrip("/").split("/")[-1]
+                send_notifications_for_execution(
+                    execution.to_dict(),
+                    _ws_name_n,
+                )
+            except Exception:
+                pass
+            # Release the execution lock now that the run has finished.
+            try:
+                from app.storage import get_backend as _get_backend
+                _get_backend(execution.enc_key).clear_execution_lock(execution.workspace_id)
+            except Exception:
+                pass
             import shutil
             try:
                 shutil.rmtree(workdir, ignore_errors=True)
@@ -529,7 +608,9 @@ class ExecutionQueue:
     def _store_execution(self, execution: Execution) -> None:
         try:
             from app.storage import get_backend
-            backend = get_backend()
+            # Pass enc_key explicitly: this method runs in a background thread
+            # with no Flask request context, so session is not available.
+            backend = get_backend(execution.enc_key)
             backend.store_execution(execution)
         except Exception as exc:
             # Log to stderr so it's visible in the server console

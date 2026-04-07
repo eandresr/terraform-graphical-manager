@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import provider_code %}
+{% from "_macros.html" import provider_code, provider_chips %}
 
 {% block title %}Dashboard — Terraform Graphical Manager{% endblock %}
 
@@ -14,6 +14,48 @@
 {% endblock %}
 
 {% block content %}
+<div x-data="dashboardStats()" x-init="init()">
+
+<!-- Loading banner -->
+<div x-show="!statsLoaded"
+     x-cloak
+     class="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4">
+  <div class="flex items-center gap-2 mb-3">
+    <svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+    </svg>
+    <span class="text-blue-800 font-semibold text-sm">Loading dashboard&hellip;</span>
+  </div>
+  <ul class="space-y-1.5 ml-6">
+    <template x-for="(step, i) in loadingSteps" :key="i">
+      <li class="flex items-start gap-2 text-sm">
+        <!-- done -->
+        <template x-if="step.done">
+          <svg class="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          </svg>
+        </template>
+        <!-- active -->
+        <template x-if="!step.done && i === currentStep">
+          <svg class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </template>
+        <!-- pending -->
+        <template x-if="!step.done && i > currentStep">
+          <svg class="w-4 h-4 text-blue-200 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9"/>
+          </svg>
+        </template>
+        <span :class="step.done ? 'text-gray-500 line-through' : i === currentStep ? 'text-blue-800 font-medium' : 'text-blue-300'">
+          <span x-text="step.label"></span>
+          <span x-show="i === currentStep && !step.done" class="ml-1 text-xs text-blue-400 font-normal">(usually instant — reads from TGM state cache)</span>
+        </span>
+      </li>
+    </template>
+  </ul>
+</div>
+
 <!-- Summary cards -->
 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
 
@@ -65,7 +107,7 @@
     </div>
     <div>
       <p class="text-gray-500 text-xs font-medium uppercase tracking-wide">Plans</p>
-      <p class="text-2xl font-bold text-gray-900">{{ total_plans }}</p>
+      <p class="text-2xl font-bold text-gray-900" x-text="stats ? stats.total_plans : '—'">—</p>
     </div>
   </div>
 
@@ -78,60 +120,192 @@
     </div>
     <div>
       <p class="text-gray-500 text-xs font-medium uppercase tracking-wide">Applies</p>
-      <p class="text-2xl font-bold text-gray-900">{{ total_applies }}</p>
+      <p class="text-2xl font-bold text-gray-900" x-text="stats ? stats.total_applies : '—'">—</p>
     </div>
   </div>
 
-  <div class="bg-white rounded-xl border {% if total_errored > 0 %}border-red-200 bg-red-50{% else %}border-gray-200{% endif %} p-4 flex items-center space-x-3">
-    <div class="w-10 h-10 rounded-lg {% if total_errored > 0 %}bg-red-100{% else %}bg-gray-100{% endif %} flex items-center justify-center flex-shrink-0">
-      <svg class="w-5 h-5 {% if total_errored > 0 %}text-red-600{% else %}text-gray-400{% endif %}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+  <div class="bg-white rounded-xl border p-4 flex items-center space-x-3"
+       :class="stats && stats.total_errored > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200'">
+    <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+         :class="stats && stats.total_errored > 0 ? 'bg-red-100' : 'bg-gray-100'">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+           :class="stats && stats.total_errored > 0 ? 'text-red-600' : 'text-gray-400'">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M6 18L18 6M6 6l12 12"/>
       </svg>
     </div>
     <div>
       <p class="text-gray-500 text-xs font-medium uppercase tracking-wide">Errored</p>
-      <p class="text-2xl font-bold {% if total_errored > 0 %}text-red-600{% else %}text-gray-900{% endif %}">{{ total_errored }}</p>
+      <p class="text-2xl font-bold"
+         :class="stats && stats.total_errored > 0 ? 'text-red-600' : 'text-gray-900'"
+         x-text="stats ? stats.total_errored : '—'">—</p>
     </div>
   </div>
 
 </div>
 
-<!-- Errored workspaces section -->
-{% if errored_workspaces %}
-<div class="bg-white rounded-xl border border-red-200 overflow-hidden mb-8">
+<!-- GitHub token warnings section -->
+{% if github_token_warnings %}
+<div class="bg-white rounded-xl border border-amber-200 overflow-hidden mb-8"
+     x-data="{ ghModalOpen: false }">
+  <div class="px-6 py-4 border-b border-amber-100 bg-amber-50 flex items-center space-x-2">
+    <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round"
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <h2 class="font-semibold text-amber-800 text-sm">Workspaces missing GitHub token</h2>
+    <span class="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">{{ github_token_warnings|length }}</span>
+    <button @click="ghModalOpen = true"
+            class="ml-2 inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium
+                   bg-amber-600 hover:bg-amber-700 text-white transition-colors">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+      </svg>
+      View all
+    </button>
+  </div>
+
+  <!-- Summary rows (up to 3, click View all for the rest) -->
+  <div class="divide-y divide-amber-50">
+    {% for ws in github_token_warnings[:3] %}
+    <a href="/workspace/{{ ws.workspace_id }}"
+       class="flex items-start px-6 py-4 hover:bg-amber-50 transition-colors group">
+      <div class="flex-1 min-w-0">
+        <div class="flex flex-wrap items-center gap-2 mb-1">
+          <span class="text-gray-900 font-semibold text-sm">{{ ws.workspace_name }}</span>
+          <span class="text-gray-400 text-xs font-mono truncate max-w-xs">{{ ws.workspace_path }}</span>
+        </div>
+        <div class="flex flex-wrap gap-1 mt-1">
+          {% for mod in ws.github_modules %}
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                       bg-amber-100 text-amber-800 text-xs font-mono border border-amber-200">
+            {{ mod.name }}
+            <span class="font-sans opacity-60 normal-case">
+              ({{ mod.source[:40] }}{% if mod.source|length > 40 %}…{% endif %})
+            </span>
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+      <svg class="w-4 h-4 text-amber-300 group-hover:text-amber-500 flex-shrink-0 ml-4 mt-1 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+      </svg>
+    </a>
+    {% endfor %}
+    {% if github_token_warnings|length > 3 %}
+    <div class="px-6 py-3 text-xs text-amber-700 bg-amber-50 text-center">
+      … and {{ github_token_warnings|length - 3 }} more —
+      <button @click="ghModalOpen = true" class="underline hover:no-underline">view all</button>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Full-list modal -->
+  <div x-show="ghModalOpen" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4"
+       @keydown.escape.window="ghModalOpen = false">
+    <div class="fixed inset-0 bg-black/40" @click="ghModalOpen = false"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col z-10">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+          <h3 class="font-semibold text-gray-900">Workspaces missing GitHub token</h3>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">{{ github_token_warnings|length }}</span>
+        </div>
+        <button @click="ghModalOpen = false"
+                class="p-1 rounded-lg hover:bg-gray-100 transition-colors">
+          <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <!-- Explanation -->
+      <div class="px-6 py-3 bg-amber-50 border-b border-amber-100 text-xs text-amber-800">
+        These workspaces declare Terraform modules sourced from GitHub but have no
+        <code class="bg-amber-100 px-1 rounded font-mono">GITHUB_TOKEN</code>
+        environment variable set in any variable group or workspace variable.
+        <code>terraform init</code> may fail when fetching those modules.
+        Fix: add an <strong>env</strong>-type variable
+        <code class="bg-amber-100 px-1 rounded font-mono">GITHUB_TOKEN</code>
+        to a global variable group or to the specific workspace's Variables tab.
+      </div>
+      <!-- Workspace list -->
+      <div class="overflow-y-auto flex-1 divide-y divide-gray-100">
+        {% for ws in github_token_warnings %}
+        <a href="/workspace/{{ ws.workspace_id }}"
+           class="flex items-start px-6 py-4 hover:bg-gray-50 transition-colors group">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+              </svg>
+              <span class="font-semibold text-sm text-gray-900">{{ ws.workspace_name }}</span>
+              <span class="text-gray-400 text-xs font-mono truncate">{{ ws.workspace_path }}</span>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1 ml-6">
+              {% for mod in ws.github_modules %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                           bg-amber-50 text-amber-800 text-xs font-mono border border-amber-200">
+                {{ mod.name }}
+                <span class="font-sans opacity-60 normal-case">
+                  ({{ mod.source[:50] }}{% if mod.source|length > 50 %}…{% endif %})
+                </span>
+              </span>
+              {% endfor %}
+            </div>
+          </div>
+          <svg class="w-4 h-4 text-gray-300 group-hover:text-gray-400 flex-shrink-0 ml-4 mt-1 transition-colors"
+               fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+          </svg>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Errored workspaces section (populated after /api/dashboard/stats loads) -->
+<div x-show="stats && stats.errored_workspaces && stats.errored_workspaces.length > 0"
+     x-cloak
+     class="bg-white rounded-xl border border-red-200 overflow-hidden mb-8">
   <div class="px-6 py-4 border-b border-red-100 bg-red-50 flex items-center space-x-2">
     <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round"
             d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
     </svg>
     <h2 class="font-semibold text-red-800 text-sm">Workspaces with errors</h2>
-    <span class="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">{{ errored_workspaces|length }}</span>
+    <span class="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700"
+          x-text="stats ? stats.errored_workspaces.length : ''"></span>
   </div>
   <div class="divide-y divide-red-50">
-    {% for ws in errored_workspaces %}
-    <a href="/executions/{{ ws.execution_id }}"
-       class="flex items-start px-6 py-4 hover:bg-red-50 transition-colors group">
-      <div class="flex-1 min-w-0">
-        <div class="flex flex-wrap items-center gap-2 mb-1">
-          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold
-                       {% if ws.command == 'plan' %}bg-purple-100 text-purple-700{% else %}bg-green-100 text-green-700{% endif %}">{{ ws.command }}</span>
-          <span class="text-gray-900 font-semibold text-sm">{{ ws.workspace_name }}</span>
-          <span class="text-gray-400 text-xs font-mono truncate max-w-xs">{{ ws.workspace_path }}</span>
-          <span class="text-gray-400 text-xs ml-auto">{{ ws.timestamp[:19] | replace('T', ' ') }}</span>
+    <template x-for="ws in (stats ? stats.errored_workspaces : [])" :key="ws.execution_id">
+      <a :href="`/executions/${ws.execution_id}`"
+         class="flex items-start px-6 py-4 hover:bg-red-50 transition-colors group">
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2 mb-1">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
+                  :class="ws.command === 'plan' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'"
+                  x-text="ws.command"></span>
+            <span class="text-gray-900 font-semibold text-sm" x-text="ws.workspace_name"></span>
+            <span class="text-gray-400 text-xs font-mono truncate max-w-xs" x-text="ws.workspace_path"></span>
+            <span class="text-gray-400 text-xs ml-auto" x-text="ws.timestamp.substring(0,19).replace('T',' ')"></span>
+          </div>
+
         </div>
-        {% if ws.error_snippet %}
-        <pre class="mt-2 text-xs text-red-700 font-mono bg-red-50 border border-red-100 rounded-lg px-3 py-2 overflow-x-auto whitespace-pre-wrap">{{ ws.error_snippet }}</pre>
-        {% endif %}
-      </div>
-      <svg class="w-4 h-4 text-red-300 group-hover:text-red-500 flex-shrink-0 ml-4 mt-1 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
-      </svg>
-    </a>
-    {% endfor %}
+        <svg class="w-4 h-4 text-red-300 group-hover:text-red-500 flex-shrink-0 ml-4 mt-1 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+        </svg>
+      </a>
+    </template>
   </div>
 </div>
-{% endif %}
 
 <!-- Workspace directory tree overview -->
 <div class="bg-white rounded-xl border border-gray-200 overflow-hidden" x-data="dashboardFilter()">
@@ -192,108 +366,28 @@
       </div>
 
       <!-- Providers -->
-      <div class="flex items-center space-x-2 mr-6">
-        {% for p in ws.providers %}
-          <span class="provider-badge provider-{{ p }}" title="{{ p }}">{{ provider_code(p) }}</span>
-        {% endfor %}
+      {% if ws.providers %}
+      <div class="mr-6">
+        <span class="providers-pill">
+          <span class="providers-pill__key">providers</span>
+          <span class="providers-pill__val">{{ provider_chips(ws.providers) }}</span>
+        </span>
       </div>
+      {% endif %}
 
       <!-- Backend -->
       {% if ws.backend %}
         <div class="mr-6">
-          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-            {{ ws.backend }}
+          <span class="providers-pill">
+            <span class="providers-pill__key">tf_backend</span>
+            <span class="providers-pill__val">{{ ws.backend }}</span>
           </span>
         </div>
       {% endif %}
 
-      <!-- Last Run badges -->
-      {% set lr = ws_latest.get(ws.id) if ws_latest is defined else none %}
-      {% if lr %}
-      <div class="flex items-center gap-1.5 mr-4 flex-shrink-0">
-
-        {# --- run: plan / apply --- #}
-        {% if lr.command == 'plan' %}
-          <span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-purple-200">
-            <span class="px-1.5 py-1 bg-purple-100 text-purple-500 font-medium">run</span>
-            <span class="px-1.5 py-1 bg-white text-purple-700 font-semibold">plan</span>
-          </span>
-        {% else %}
-          <span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-teal-200">
-            <span class="px-1.5 py-1 bg-teal-100 text-teal-500 font-medium">run</span>
-            <span class="px-1.5 py-1 bg-white text-teal-700 font-semibold">apply</span>
-          </span>
-        {% endif %}
-
-        {# --- status: ok / failed / running / queued / canceled --- #}
-        {% if lr.status == 'completed' %}
-          <span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-green-200">
-            <span class="px-1.5 py-1 bg-green-100 text-green-500 font-medium">status</span>
-            <span class="px-1.5 py-1 bg-white text-green-700 font-semibold flex items-center gap-0.5">
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>ok
-            </span>
-          </span>
-        {% elif lr.status == 'failed' %}
-          <span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-red-200">
-            <span class="px-1.5 py-1 bg-red-100 text-red-500 font-medium">status</span>
-            <span class="px-1.5 py-1 bg-white text-red-700 font-semibold flex items-center gap-0.5">
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>failed
-            </span>
-          </span>
-        {% elif lr.status == 'running' %}
-          <span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-blue-200 animate-pulse">
-            <span class="px-1.5 py-1 bg-blue-100 text-blue-500 font-medium">status</span>
-            <span class="px-1.5 py-1 bg-white text-blue-700 font-semibold flex items-center gap-0.5">
-              <svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>running
-            </span>
-          </span>
-        {% elif lr.status == 'queued' %}
-          <span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-yellow-200">
-            <span class="px-1.5 py-1 bg-yellow-100 text-yellow-500 font-medium">status</span>
-            <span class="px-1.5 py-1 bg-white text-yellow-700 font-semibold">queued</span>
-          </span>
-        {% elif lr.status == 'canceled' %}
-          <span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-gray-200">
-            <span class="px-1.5 py-1 bg-gray-100 text-gray-400 font-medium">status</span>
-            <span class="px-1.5 py-1 bg-white text-gray-500 font-semibold">canceled</span>
-          </span>
-        {% endif %}
-
-        {# --- sentinel: pass / fail --- #}
-        {% if lr.sentinel_result %}
-          {% if lr.sentinel_result.passed %}
-            <span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-emerald-200">
-              <span class="px-1.5 py-1 bg-emerald-100 text-emerald-500 font-medium flex items-center gap-0.5">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>sentinel
-              </span>
-              <span class="px-1.5 py-1 bg-white text-emerald-700 font-semibold">pass</span>
-            </span>
-          {% else %}
-            <span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-red-200">
-              <span class="px-1.5 py-1 bg-red-100 text-red-500 font-medium flex items-center gap-0.5">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016zM12 9v2m0 4h.01"/></svg>sentinel
-              </span>
-              <span class="px-1.5 py-1 bg-white text-red-700 font-semibold">fail</span>
-            </span>
-          {% endif %}
-        {% endif %}
-
-        {# --- tf: version --- #}
-        {% if lr.terraform_version %}
-          <span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-gray-200 font-mono">
-            <span class="px-1.5 py-1 bg-gray-100 text-gray-400 font-sans font-medium">tf</span>
-            <span class="px-1.5 py-1 bg-white text-gray-600">{{ lr.terraform_version }}</span>
-          </span>
-        {% endif %}
-
-        {# --- at: timestamp --- #}
-        <span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-gray-100 font-mono">
-          <span class="px-1.5 py-1 bg-gray-50 text-gray-400 font-sans font-medium">at</span>
-          <span class="px-1.5 py-1 bg-white text-gray-500">{{ lr.timestamp[:16] | replace('T', ' ') }}</span>
-        </span>
-
-      </div>
-      {% endif %}
+      <!-- Last Run badges (injected by dashboardStats() after /api/dashboard/stats loads) -->
+      <div class="ws-last-run flex items-center gap-1.5 mr-4 flex-shrink-0"
+           data-ws-id="{{ ws.id }}"></div>
 
       <!-- Arrow -->
       <svg class="w-4 h-4 text-gray-300 group-hover:text-gray-400 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -315,11 +409,125 @@
   </div>
   {% endif %}
 </div>
+
+</div><!-- end dashboardStats wrapper -->
 {% endblock %}
 
 {% block scripts %}
 <script>
-  // Dashboard workspace filter (search box in All Workspaces section)
+  // ── Dashboard lazy stats (execution history from storage backend) ────────────
+  function dashboardStats() {
+    return {
+      statsLoaded: false,
+      stats: null,
+      currentStep: 0,
+      loadingSteps: [
+        { label: 'Reading in-memory execution queue for live running and queued jobs…', done: false },
+        { label: 'Loading last known workspace states from the TGM state cache…', done: false },
+        { label: 'Building workspace summary (errored workspaces, last-run badges)…', done: false },
+      ],
+
+      async init() {
+        // Kick off the API fetch immediately
+        const fetchPromise = fetch('/api/dashboard/stats').then(r => r.json());
+
+        // Advance loading steps with realistic timing while waiting
+        this.currentStep = 0;
+        await new Promise(r => setTimeout(r, 350));
+        if (!this.statsLoaded) {
+          this.loadingSteps[0].done = true;
+          this.currentStep = 1;
+        }
+        await new Promise(r => setTimeout(r, 650));
+        if (!this.statsLoaded) {
+          this.loadingSteps[1].done = true;
+          this.currentStep = 2;
+        }
+
+        // Wait for actual data
+        const data = await fetchPromise;
+        this.loadingSteps[0].done = true;
+        this.loadingSteps[1].done = true;
+        this.loadingSteps[2].done = true;
+        this.stats = data;
+        this.statsLoaded = true;
+
+        // Inject last-run badges into workspace rows
+        this.$nextTick(() => injectLastRunBadges(data.ws_latest || {}));
+      },
+    };
+  }
+
+  // ── Inject last-run badges into workspace rows after stats load ──────────────
+  function badge(ring, leftBg, leftText, leftContent, rightBg, rightText, rightContent, extra) {
+    return `<span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ${ring} ${extra||''}">`
+      + `<span class="px-1.5 py-1 ${leftBg} ${leftText} font-medium">${leftContent}</span>`
+      + `<span class="px-1.5 py-1 ${rightBg} ${rightText} font-semibold flex items-center gap-0.5">${rightContent}</span>`
+      + `</span>`;
+  }
+  const SVG_OK      = `<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`;
+  const SVG_FAIL    = `<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>`;
+  const SVG_SPIN    = `<svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>`;
+  const SVG_SHIELD_OK   = `<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>`;
+  const SVG_SHIELD_FAIL = `<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016zM12 9v2m0 4h.01"/></svg>`;
+
+  function renderLastRunBadges(lr) {
+    if (!lr) return '';
+    const parts = [];
+    // run
+    const isplan = lr.command === 'plan';
+    parts.push(badge(
+      isplan ? 'ring-purple-200' : 'ring-teal-200',
+      isplan ? 'bg-purple-100' : 'bg-teal-100',
+      isplan ? 'text-purple-500' : 'text-teal-500', 'run',
+      'bg-white', isplan ? 'text-purple-700' : 'text-teal-700', lr.command
+    ));
+    // status
+    const st = lr.status;
+    if (st === 'completed')
+      parts.push(badge('ring-green-200','bg-green-100','text-green-500','status','bg-white','text-green-700', SVG_OK+'ok'));
+    else if (st === 'failed')
+      parts.push(badge('ring-red-200','bg-red-100','text-red-500','status','bg-white','text-red-700', SVG_FAIL+'failed'));
+    else if (st === 'running')
+      parts.push(badge('ring-blue-200','bg-blue-100','text-blue-500','status','bg-white','text-blue-700', SVG_SPIN+'running','animate-pulse'));
+    else if (st === 'queued')
+      parts.push(badge('ring-yellow-200','bg-yellow-100','text-yellow-500','status','bg-white','text-yellow-700','queued'));
+    else if (st === 'canceled')
+      parts.push(badge('ring-gray-200','bg-gray-100','text-gray-400','status','bg-white','text-gray-500','canceled'));
+    // sentinel
+    const sr = lr.sentinel_result;
+    if (sr) {
+      if (sr.passed)
+        parts.push(badge('ring-emerald-200',
+          'bg-emerald-100','text-emerald-500',SVG_SHIELD_OK+'sentinel',
+          'bg-white','text-emerald-700','pass'));
+      else
+        parts.push(badge('ring-red-200',
+          'bg-red-100','text-red-500',SVG_SHIELD_FAIL+'sentinel',
+          'bg-white','text-red-700','fail'));
+    }
+    // tf version
+    if (lr.terraform_version)
+      parts.push(badge('ring-gray-200 font-mono','bg-gray-100','text-gray-400 font-sans','tf','bg-white','text-gray-600',lr.terraform_version));
+    // at timestamp
+    const ts = (lr.timestamp || '').slice(0,16).replace('T',' ');
+    parts.push(
+      `<span class="inline-flex items-center rounded text-xs leading-none overflow-hidden ring-1 ring-gray-100 font-mono">`
+      + `<span class="px-1.5 py-1 bg-gray-50 text-gray-400 font-sans font-medium">at</span>`
+      + `<span class="px-1.5 py-1 bg-white text-gray-500">${ts}</span>`
+      + `</span>`
+    );
+    return parts.join('');
+  }
+
+  function injectLastRunBadges(wsLatest) {
+    document.querySelectorAll('.ws-last-run[data-ws-id]').forEach(el => {
+      const lr = wsLatest[el.dataset.wsId];
+      if (lr) el.innerHTML = renderLastRunBadges(lr);
+    });
+  }
+
+  // ── Dashboard workspace filter (search box) ──────────────────────────────────
   function dashboardFilter() {
     return {
       query: '',
@@ -340,22 +548,13 @@
     };
   }
 
-  // Poll queue stats for the dashboard cards
-  async function pollQueueStats() {
-    try {
-      const res = await fetch('/api/workspaces');
-      // Just refresh running/queued in a real implementation
-    } catch(e) {}
-  }
-
-  // Socket.IO global execution counter
+  // ── Socket.IO live execution updates ─────────────────────────────────────────
   const socket = io();
-  socket.on('execution_status', function(data) {
-    updateQueueCounter();
+  socket.on('execution_status', function() {
+    // Refresh stats when any execution changes status
+    fetch('/api/dashboard/stats').then(r => r.json()).then(data => {
+      injectLastRunBadges(data.ws_latest || {});
+    }).catch(() => {});
   });
-
-  async function updateQueueCounter() {
-    // In a full implementation this would call an API endpoint
-  }
 </script>
 {% endblock %}

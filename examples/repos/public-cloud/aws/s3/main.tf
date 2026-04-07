@@ -29,3 +29,8 @@ resource "aws_s3_bucket_public_access_block" "this" {
   restrict_public_buckets = true
 }
 
+module "bucket_from_git_modules" {
+  source = "github.com/eandresr/terraform-basic-aws-s3-code.git//?ref=main"
+
+  bucket = "${var.bucket_name}-from-module"
+}

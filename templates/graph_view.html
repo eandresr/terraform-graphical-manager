@@ -2,7 +2,7 @@
 {% block title %}Graph — {{ workspace.name }} — Terraform Graphical Manager{% endblock %}
 
 {% block head %}
-<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="{{ url_for('static', filename='js/vendors/d3.v7.min.js') }}"></script>
 {% endblock %}
 
 {% block content %}

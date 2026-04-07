@@ -180,10 +180,228 @@ def submit_run(workspace_id: str):
         user_env=user_env,
     )
 
+    # Check for an existing execution lock before queuing.
+    try:
+        lock = get_backend().get_execution_lock(workspace_id)
+    except Exception:
+        lock = None
+    if lock:
+        _eid = (lock.get("execution_id") or "")
+        _cmd = lock.get("command", "run")
+        _reason = lock.get("reason", "")
+        _reason_part = f" Reason: {_reason}" if _reason else ""
+        _id_part = f"(execution {_eid[:8]})" if _eid else "(manual lock)"
+        return jsonify({
+            "ok": False,
+            "locked": True,
+            "lock": lock,
+            "error": (
+                f"Workspace is locked — {_cmd} {_id_part}.{_reason_part} "
+                "Unlock the workspace or wait for the run to finish."
+            ),
+        }), 423
+
     eq = current_app.config["EXECUTION_QUEUE"]
     eq.submit(execution)
 
     return jsonify({"execution_id": execution.id, "status": execution.status.value})
+
+
+# -------------------------------------------------------------------------
+# Workspace execution lock status
+# -------------------------------------------------------------------------
+
+@api_bp.route("/workspace/<workspace_id>/execution-lock")
+def get_workspace_execution_lock(workspace_id: str):
+    """Return the active execution lock for the workspace, or an empty lock."""
+    workspace = _get_workspace_or_404(workspace_id)
+    if workspace is None:
+        return jsonify({"error": "Workspace not found"}), 404
+    try:
+        from app.storage import get_backend as _get_backend
+        lock = _get_backend().get_execution_lock(workspace_id)
+    except Exception:
+        lock = None
+    if lock:
+        return jsonify({"locked": True, "lock": lock})
+    return jsonify({"locked": False, "lock": None})
+
+
+@api_bp.route("/workspace/<workspace_id>/execution-lock", methods=["POST"])
+def set_workspace_execution_lock(workspace_id: str):
+    """Manually lock a workspace (requires a reason)."""
+    workspace = _get_workspace_or_404(workspace_id)
+    if workspace is None:
+        return jsonify({"error": "Workspace not found"}), 404
+    body: Dict[str, Any] = request.get_json(silent=True) or {}
+    reason = (body.get("reason") or "").strip()
+    if not reason:
+        return jsonify({"error": "reason is required"}), 400
+    import datetime as _dt
+    lock_data = {
+        "execution_id": None,
+        "command": "manual",
+        "started_at": _dt.datetime.utcnow().isoformat(),
+        "workspace_id": workspace_id,
+        "reason": reason,
+        "manual": True,
+    }
+    try:
+        from app.storage import get_backend as _get_backend
+        _get_backend().set_execution_lock(workspace_id, lock_data)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True, "lock": lock_data})
+
+
+@api_bp.route("/workspace/<workspace_id>/execution-lock", methods=["DELETE"])
+def delete_workspace_execution_lock(workspace_id: str):
+    """Force-clear the execution lock for a workspace."""
+    workspace = _get_workspace_or_404(workspace_id)
+    if workspace is None:
+        return jsonify({"error": "Workspace not found"}), 404
+    try:
+        from app.storage import get_backend as _get_backend
+        _get_backend().clear_execution_lock(workspace_id)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True})
+
+
+# -------------------------------------------------------------------------
+# Workspace execution statistics (time-series for overview charts)
+# -------------------------------------------------------------------------
+
+@api_bp.route("/workspace/<workspace_id>/stats")
+def workspace_stats(workspace_id: str):
+    """Return time-series execution stats (duration + resource counts) for charts."""
+    from flask import session as _session
+    workspace = _get_workspace_or_404(workspace_id)
+    if workspace is None:
+        return jsonify({"error": "Workspace not found"}), 404
+    enc_key = _session.get("tgm_enc_key", "")
+    try:
+        from app.storage import get_backend as _gb
+        all_meta = _gb(enc_key).list_executions(workspace_id)
+    except Exception:
+        all_meta = []
+
+    # If the configured (cloud) backend returned nothing — either because it is
+    # unreachable or because runs predate the cloud migration — fall back to the
+    # local filesystem so charts still show historical data.
+    if not all_meta:
+        try:
+            from app.storage.local_backend import LocalBackend as _LocalBackend
+            local_meta = _LocalBackend().list_executions(workspace_id)
+            if local_meta:
+                all_meta = local_meta
+        except Exception:
+            pass
+
+    terminal_statuses = {"completed", "failed"}
+    series = []
+    for meta in sorted(all_meta, key=lambda m: m.get("timestamp", "")):
+        if meta.get("status") not in terminal_statuses:
+            continue
+        series.append({
+            "timestamp": meta.get("timestamp", ""),
+            "command": meta.get("command", ""),
+            "status": meta.get("status", ""),
+            "duration_seconds": meta.get("duration_seconds"),
+            "resource_counts": meta.get("resource_counts"),
+            "state_resource_count": meta.get("state_resource_count"),
+        })
+
+    return jsonify({"series": series[-50:]})
+
+
+@api_bp.route("/metrics-config", methods=["GET"])
+def get_global_metrics_config():
+    """Return the global metrics export configuration from tfg.conf."""
+    config = current_app.config["TFG_CONFIG"]
+    return jsonify({
+        "enabled":                  config.metrics_enabled,
+        "backend":                  config.metrics_backend,
+        "prefix":                   config.metrics_prefix,
+        "influxdb_url":             config.metrics_influxdb_url,
+        "influxdb_token":           config.metrics_influxdb_token,
+        "influxdb_org":             config.metrics_influxdb_org,
+        "influxdb_bucket":          config.metrics_influxdb_bucket,
+        "influxdb_verify_ssl":      config.metrics_influxdb_verify_ssl,
+        "prometheus_url":           config.metrics_prometheus_url,
+        "prometheus_job":           config.metrics_prometheus_job,
+        "prometheus_username":      config.metrics_prometheus_username,
+        "prometheus_password":      config.metrics_prometheus_password,
+        "prometheus_verify_ssl":    config.metrics_prometheus_verify_ssl,
+        "graphite_host":            config.metrics_graphite_host,
+        "graphite_port":            config.metrics_graphite_port,
+        "graphite_protocol":        config.metrics_graphite_protocol,
+    })
+
+
+@api_bp.route("/metrics-config", methods=["POST"])
+def save_global_metrics_config():
+    """Save the global metrics export configuration to tfg.conf."""
+    config = current_app.config["TFG_CONFIG"]
+    body: Dict[str, Any] = request.get_json(silent=True) or {}
+
+    def _str(key, default=""):
+        return str(body.get(key, default)).strip()
+
+    def _bool(key, default=True):
+        v = body.get(key, default)
+        return v if isinstance(v, bool) else str(v).lower() in ("true", "1", "yes")
+
+    updates = {
+        "metrics.enabled":                  "true" if _bool("enabled") else "false",
+        "metrics.backend":                  _str("backend").lower(),
+        "metrics.prefix":                   _str("prefix", "tgm"),
+        "metrics.influxdb_url":             _str("influxdb_url"),
+        "metrics.influxdb_token":           _str("influxdb_token"),
+        "metrics.influxdb_org":             _str("influxdb_org"),
+        "metrics.influxdb_bucket":          _str("influxdb_bucket", "tgm"),
+        "metrics.influxdb_verify_ssl":      "true" if _bool("influxdb_verify_ssl") else "false",
+        "metrics.prometheus_url":           _str("prometheus_url"),
+        "metrics.prometheus_job":           _str("prometheus_job", "tgm"),
+        "metrics.prometheus_username":      _str("prometheus_username"),
+        "metrics.prometheus_password":      _str("prometheus_password"),
+        "metrics.prometheus_verify_ssl":    "true" if _bool("prometheus_verify_ssl") else "false",
+        "metrics.graphite_host":            _str("graphite_host"),
+        "metrics.graphite_port":            _str("graphite_port", "2003"),
+        "metrics.graphite_protocol":        _str("graphite_protocol", "tcp"),
+    }
+    try:
+        config.save(updates)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True})
+
+
+@api_bp.route("/workspace/<workspace_id>/metrics-config", methods=["GET"])
+def get_workspace_metrics_config(workspace_id: str):
+    """Return per-workspace metrics opt-out flag."""
+    try:
+        from app.storage import get_backend as _gb
+        ws_cfg = _gb().get_workspace_config(workspace_id)
+    except Exception:
+        ws_cfg = {}
+    return jsonify({"metrics_enabled": ws_cfg.get("metrics_enabled", True)})
+
+
+@api_bp.route("/workspace/<workspace_id>/metrics-config", methods=["POST"])
+def set_workspace_metrics_config(workspace_id: str):
+    """Toggle per-workspace metrics sending. Body: {"metrics_enabled": true|false}."""
+    body: Dict[str, Any] = request.get_json(silent=True) or {}
+    enabled = bool(body.get("metrics_enabled", True))
+    try:
+        from app.storage import get_backend as _gb
+        backend = _gb()
+        ws_cfg = backend.get_workspace_config(workspace_id)
+        ws_cfg["metrics_enabled"] = enabled
+        backend.set_workspace_config(workspace_id, ws_cfg)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "metrics_enabled": enabled})
 
 
 # -------------------------------------------------------------------------
@@ -192,8 +410,10 @@ def submit_run(workspace_id: str):
 
 @api_bp.route("/executions/<execution_id>")
 def get_execution(execution_id: str):
+    from flask import session as _session
     eq = current_app.config["EXECUTION_QUEUE"]
-    execution = eq.get(execution_id)
+    enc_key = _session.get("tgm_enc_key", "")
+    execution = eq.get(execution_id, enc_key)
     if execution is None:
         return jsonify({"error": "Execution not found"}), 404
     return jsonify(execution.to_dict())
@@ -201,8 +421,10 @@ def get_execution(execution_id: str):
 
 @api_bp.route("/executions/<execution_id>/logs")
 def get_execution_logs(execution_id: str):
+    from flask import session as _session
     eq = current_app.config["EXECUTION_QUEUE"]
-    execution = eq.get(execution_id)
+    enc_key = _session.get("tgm_enc_key", "")
+    execution = eq.get(execution_id, enc_key)
     if execution is None:
         return jsonify({"error": "Execution not found"}), 404
 
@@ -210,7 +432,7 @@ def get_execution_logs(execution_id: str):
     if getattr(execution, "_from_storage", False) and not execution.logs:
         try:
             from app.storage import get_backend
-            backend = get_backend()
+            backend = get_backend(enc_key)
             raw = backend.get_logs_by_id(execution_id)
             if raw:
                 execution.logs = raw.splitlines()
@@ -224,8 +446,10 @@ def get_execution_logs(execution_id: str):
 
 @api_bp.route("/executions/<execution_id>/plan")
 def get_execution_plan(execution_id: str):
+    from flask import session as _session
+    enc_key = _session.get("tgm_enc_key", "")
     eq = current_app.config["EXECUTION_QUEUE"]
-    execution = eq.get(execution_id)
+    execution = eq.get(execution_id, enc_key)
     if execution is None:
         return jsonify({"error": "Execution not found"}), 404
 
@@ -234,7 +458,7 @@ def get_execution_plan(execution_id: str):
     if not plan_json and getattr(execution, "_from_storage", False):
         try:
             from app.storage import get_backend
-            backend = get_backend()
+            backend = get_backend(enc_key)
             plan_json = backend.get_plan_json_by_id(execution_id)
         except Exception:
             pass
@@ -254,8 +478,10 @@ def cancel_execution(execution_id: str):
 
 @api_bp.route("/workspace/<workspace_id>/executions")
 def workspace_executions(workspace_id: str):
+    from flask import session as _session
     eq = current_app.config["EXECUTION_QUEUE"]
-    runs = eq.list_for_workspace(workspace_id)
+    enc_key = _session.get("tgm_enc_key", "")
+    runs = eq.list_for_workspace(workspace_id, enc_key)
     runs_sorted = sorted(runs, key=lambda r: r.timestamp, reverse=True)
     return jsonify([r.to_dict() for r in runs_sorted])
 
@@ -1180,7 +1406,24 @@ def list_variable_groups():
 def list_variable_groups_all():
     """List every group (for assign dialog)."""
     from app.variable_groups import list_all_groups, sanitize_for_frontend
-    return jsonify({"groups": [sanitize_for_frontend(g) for g in list_all_groups()]})
+    groups = list_all_groups()
+    result = {"groups": [sanitize_for_frontend(g) for g in groups]}
+
+    # Warn when a cloud backend is active but has no groups while local does.
+    if not groups:
+        from app.storage import _resolve_type
+        backend_type = _resolve_type()
+        if backend_type != "local":
+            try:
+                from app.storage.local_backend import LocalBackend
+                local_count = len(LocalBackend().list_variable_groups())
+                if local_count:
+                    result["local_only_count"] = local_count
+                    result["backend_type"] = backend_type
+            except Exception:
+                pass
+
+    return jsonify(result)
 
 
 @api_bp.route("/variable-groups", methods=["POST"])
@@ -1307,3 +1550,494 @@ def sensitive_vars_summary():
                     "variable": var_key,
                 })
     return jsonify(entries)
+
+
+# -------------------------------------------------------------------------
+# Backend credentials (configure cloud backend via UI)
+# -------------------------------------------------------------------------
+
+@api_bp.route("/backend-config", methods=["GET"])
+def get_backend_config_api():
+    """Return current backend config with sensitive fields masked."""
+    from app.backend_config import get_backend_config, mask_sensitive
+
+    config = current_app.config["TFG_CONFIG"]
+    bc = get_backend_config(config)
+    backend_type = (bc.get("type") or "local").lower().strip()
+    # Never expose raw ciphertext — mask sensitive fields for display
+    return jsonify(mask_sensitive(bc, backend_type))
+
+
+@api_bp.route("/backend-config", methods=["POST"])
+def save_backend_config_api():
+    """
+    Save backend credentials (sensitive fields sent as plaintext — we encrypt
+    them here before persisting).  Requires portal lock to be active (enc_key
+    must be in session) whenever sensitive fields are provided.
+
+    Body:
+      { "type": "aws"|"gcp"|"azure"|"local",
+        "bucket": "...",
+        ... <all fields for that backend type> }
+    """
+    from flask import session as _session
+    from app.backend_config import (
+        get_backend_config, save_backend_config, BACKEND_FIELDS, SENSITIVE_FIELDS,
+        save_migration_source_config, delete_migration_source_config,
+    )
+
+    config = current_app.config["TFG_CONFIG"]
+    enc_key = _session.get("tgm_enc_key", "")
+    body = request.get_json(silent=True) or {}
+    backend_type = (body.get("type") or "local").lower().strip()
+
+    # Validate: sensitive fields require enc_key
+    has_sensitive = any(
+        (body.get(f) or "").strip()
+        for f in SENSITIVE_FIELDS.get(backend_type, [])
+    )
+    if has_sensitive and not enc_key:
+        return jsonify({
+            "ok": False,
+            "error": "A site password (lock) is required to store encrypted credentials.",
+        }), 400
+
+    # Filter to known fields + type
+    valid_fields = BACKEND_FIELDS.get(backend_type, [])
+    data: Dict[str, Any] = {"type": backend_type}
+    for field in valid_fields:
+        val = body.get(field)
+        if val is not None:
+            data[field] = str(val).strip()
+
+    # Preserve existing encrypted values for sensitive fields when no new value provided.
+    # Empty string OR the mask placeholder '••••••••' both mean "keep existing".
+    existing = get_backend_config(config)
+    for field in SENSITIVE_FIELDS.get(backend_type, []):
+        new_val = data.get(field, "").strip()
+        if not new_val or new_val == "\u2022" * 8:
+            # Keep existing encrypted value if present
+            if existing.get(field):
+                data[field] = existing[field]
+            else:
+                data.pop(field, None)
+        else:
+            # Encrypt the new plaintext value
+            from app.crypto import encrypt as _encrypt
+            data[field] = _encrypt(new_val, enc_key)
+
+    # If the backend type is changing, stash the current (old) config so the
+    # migration endpoint can still reach the source credentials after the new
+    # config has been saved over them.
+    old_type = (existing.get("type") or "local").lower().strip()
+    if old_type != backend_type and old_type != "local" and existing:
+        save_migration_source_config(config, existing)
+    elif old_type == backend_type:
+        # Type unchanged — any previous stash is no longer relevant.
+        delete_migration_source_config(config)
+
+    save_backend_config(config, data)
+    return jsonify({"ok": True})
+
+
+@api_bp.route("/backend-config/test", methods=["POST"])
+def test_backend_config_api():
+    """
+    Test connectivity to a backend using the provided credentials.
+    Accepts either a full set of credentials (for a *new* config being saved)
+    or an empty body (to test the currently saved config).
+    """
+    from flask import session as _session
+    from app.backend_config import (
+        get_backend_config, decrypt_fields, test_connectivity, SENSITIVE_FIELDS
+    )
+
+    config = current_app.config["TFG_CONFIG"]
+    enc_key = _session.get("tgm_enc_key", "")
+    body = request.get_json(silent=True) or {}
+
+    if body:
+        # Caller provided credentials directly (UI test before saving)
+        backend_type = (body.get("type") or "local").lower().strip()
+        creds = dict(body)
+        creds["type"] = backend_type
+        # Decrypt any encrypted fields that were passed through
+        # (UI sends plaintext for new values, ciphertext token placeholder for unchanged,
+        # or empty string when the field was never pre-filled in the form)
+        for field in SENSITIVE_FIELDS.get(backend_type, []):
+            val = creds.get(field, "")
+            if not val or val == "••••••••":
+                # Empty or placeholder → use the saved encrypted value.
+                saved = get_backend_config(config)
+                if saved.get(field) and enc_key:
+                    from app.crypto import decrypt as _decrypt
+                    try:
+                        creds[field] = _decrypt(saved[field], enc_key)
+                    except ValueError:
+                        return jsonify(
+                            {"ok": False,
+                             "error": "Could not decrypt saved credentials."}
+                        ), 400
+                else:
+                    creds.pop(field, None)
+    else:
+        # Test currently saved config
+        saved = get_backend_config(config)
+        if not saved:
+            return jsonify({"ok": False, "error": "No backend config saved yet."}), 400
+        backend_type = (saved.get("type") or "local").lower().strip()
+        if backend_type == "local":
+            return jsonify({"ok": True})  # local always works
+        if not enc_key:
+            return jsonify(
+                {"ok": False, "error": "Portal must be unlocked to test credentials."}
+            ), 400
+        try:
+            creds = decrypt_fields(saved, backend_type, enc_key)
+        except ValueError:
+            return jsonify(
+                {"ok": False, "error": "Stored credentials could not be decrypted."}
+            ), 400
+
+    result = test_connectivity(backend_type, creds)
+    return jsonify(result)
+
+
+@api_bp.route("/backend-config/diff", methods=["GET"])
+def diff_backend_api():
+    """
+    Compare the local backend vs the currently active cloud backend.
+    Returns counts and lists of objects present in local but absent in cloud,
+    and vice-versa, so the user can decide whether to migrate.
+
+    Response:
+      {
+        "ok": true,
+        "source": "local",
+        "dest": "aws",
+        "source_counts": { "variable_groups": 2, "executions": 5, "notification_channels": 0 },
+        "dest_counts":   { "variable_groups": 0, "executions": 3, "notification_channels": 0 },
+        "only_in_source": { "variable_groups": ["example", "prod"], "executions": 2 },
+        "only_in_dest":   { "executions": 1 }
+      }
+    """
+    from flask import session as _session
+    from app.backend_config import get_backend_config, decrypt_fields
+
+    config = current_app.config["TFG_CONFIG"]
+    enc_key = _session.get("tgm_enc_key", "")
+
+    saved = get_backend_config(config)
+    dest_type = (saved.get("type") or "local").lower().strip()
+
+    if dest_type == "local":
+        return jsonify(
+            {"ok": False, "error": "Active backend is already local — nothing to compare."}
+        ), 400
+
+    # Build local backend instance
+    from app.storage.local_backend import LocalBackend
+    local = LocalBackend()
+
+    # Build cloud backend instance (needs decrypted creds)
+    if not enc_key:
+        return jsonify(
+            {"ok": False, "error": "Portal must be unlocked to read cloud credentials."}
+        ), 400
+    try:
+        creds = decrypt_fields(saved, dest_type, enc_key)
+    except ValueError:
+        return jsonify({"ok": False, "error": "Could not decrypt cloud credentials."}), 400
+
+    try:
+        from app.backend_config import _build_backend_from_creds
+        cloud = _build_backend_from_creds(dest_type, creds)
+    except Exception as exc:
+        return jsonify(
+            {"ok": False, "error": f"Could not connect to cloud backend: {exc}"}
+        ), 400
+
+    # --- collect data summaries ---
+    def _safe(fn):
+        try:
+            return fn()
+        except Exception:
+            return []
+
+    local_vg = _safe(local.list_variable_groups)
+    cloud_vg = _safe(cloud.list_variable_groups)
+    local_nc = _safe(local.list_notification_channels)
+    cloud_nc = _safe(cloud.list_notification_channels)
+    local_ex = _safe(lambda: local.list_all_executions())
+    cloud_ex = _safe(lambda: cloud.list_all_executions())
+
+    # Identify items only in source (by name / id)
+    local_vg_names = {g.get("name", g.get("id", "?")) for g in local_vg}
+    cloud_vg_names = {g.get("name", g.get("id", "?")) for g in cloud_vg}
+    local_nc_names = {c.get("name", c.get("id", "?")) for c in local_nc}
+    cloud_nc_names = {c.get("name", c.get("id", "?")) for c in cloud_nc}
+    local_ex_ids = {e.get("id", e.get("timestamp", "?")) for e in local_ex}
+    cloud_ex_ids = {e.get("id", e.get("timestamp", "?")) for e in cloud_ex}
+
+    type_labels = {"aws": "AWS S3", "gcp": "GCP Storage", "azure": "Azure Blob"}
+
+    return jsonify({
+        "ok": True,
+        "source": "local",
+        "dest": dest_type,
+        "source_label": "Local FS",
+        "dest_label": type_labels.get(dest_type, dest_type.upper()),
+        "source_counts": {
+            "variable_groups": len(local_vg),
+            "notification_channels": len(local_nc),
+            "executions": len(local_ex),
+        },
+        "dest_counts": {
+            "variable_groups": len(cloud_vg),
+            "notification_channels": len(cloud_nc),
+            "executions": len(cloud_ex),
+        },
+        "only_in_source": {
+            "variable_groups": sorted(local_vg_names - cloud_vg_names),
+            "notification_channels": sorted(local_nc_names - cloud_nc_names),
+            "executions_count": len(local_ex_ids - cloud_ex_ids),
+        },
+        "only_in_dest": {
+            "variable_groups": sorted(cloud_vg_names - local_vg_names),
+            "notification_channels": sorted(cloud_nc_names - local_nc_names),
+            "executions_count": len(cloud_ex_ids - local_ex_ids),
+        },
+    })
+
+
+@api_bp.route("/backend-config/migrate", methods=["POST"])
+def migrate_backend_api():
+    """
+    Migrate data from the current/old backend to the newly configured backend.
+    Body:
+      {
+        "source_type": "local"|"aws"|...,   # optional, defaults to current backend
+        "dest_type": "aws"|"gcp"|...,       # required
+        "dest_creds": { ... }              # plaintext credentials for destination
+      }
+    """
+    from flask import session as _session
+    from app.backend_config import (
+        get_backend_config, decrypt_fields, migrate_backend, SENSITIVE_FIELDS,
+        get_migration_source_config,
+    )
+
+    config = current_app.config["TFG_CONFIG"]
+    enc_key = _session.get("tgm_enc_key", "")
+    body = request.get_json(silent=True) or {}
+
+    dest_type = (body.get("dest_type") or "").lower().strip()
+    if not dest_type:
+        return jsonify({"ok": False, "error": "dest_type is required"}), 400
+
+    # Resolve destination credentials
+    dest_creds = dict(body.get("dest_creds") or {})
+    dest_creds["type"] = dest_type
+
+    # When no dest_creds supplied, use the saved (encrypted) config and decrypt it
+    if not body.get("dest_creds"):
+        saved = get_backend_config(config)
+        if not enc_key:
+            return jsonify(
+                {"ok": False, "error": "Portal must be unlocked to read cloud credentials."}
+            ), 400
+        try:
+            dest_creds = decrypt_fields(saved, dest_type, enc_key)
+        except ValueError:
+            return jsonify(
+                {"ok": False, "error": "Could not decrypt destination credentials."}
+            ), 400
+        dest_creds["type"] = dest_type
+
+    # Decrypt any "keep existing" placeholder values for dest (when dest_creds was provided)
+    else:
+        for field in SENSITIVE_FIELDS.get(dest_type, []):
+            val = dest_creds.get(field, "")
+            # Treat empty string the same as the mask placeholder: the UI did not
+            # provide a new value (sensitive fields are never pre-filled in the form),
+            # so always fall back to the saved encrypted value.
+            if not val or val == "••••••••":
+                saved = get_backend_config(config)
+                if saved.get(field) and enc_key:
+                    from app.crypto import decrypt as _decrypt
+                    try:
+                        dest_creds[field] = _decrypt(saved[field], enc_key)
+                    except ValueError:
+                        return jsonify(
+                            {"ok": False,
+                             "error": "Could not decrypt destination credentials."}
+                        ), 400
+                else:
+                    dest_creds.pop(field, None)
+
+    # Resolve source
+    source_type_override = (body.get("source_type") or "").lower().strip()
+    if source_type_override:
+        source_type = source_type_override
+        if source_type == "local":
+            # Local backend needs no credentials
+            source_creds_raw = {}
+        elif body.get("source_creds"):
+            source_creds_raw = dict(body["source_creds"])
+        else:
+            # Prefer the stashed migration-source config (populated by
+            # save_backend_config_api when the type changed).  Fall back to
+            # the current saved config only when no stash exists.
+            stash = get_migration_source_config(config)
+            if stash and (stash.get("type") or "local").lower() == source_type:
+                source_creds_raw = stash
+            else:
+                source_creds_raw = get_backend_config(config)
+    else:
+        source_creds_raw = get_backend_config(config)
+        source_type = (source_creds_raw.get("type") or "local").lower().strip()
+
+    if source_type not in ("local",) and enc_key:
+        try:
+            source_creds = decrypt_fields(source_creds_raw, source_type, enc_key)
+        except ValueError:
+            return jsonify({"ok": False, "error": "Could not decrypt source credentials."}), 400
+    else:
+        source_creds = dict(source_creds_raw)
+
+    # Run migration synchronously (short operation for typical TFG data sizes)
+    result = migrate_backend(source_type, source_creds, dest_type, dest_creds)
+    return jsonify(result)
+
+
+# -------------------------------------------------------------------------
+# GitHub module token check
+# -------------------------------------------------------------------------
+
+@api_bp.route("/workspace/<workspace_id>/github-token-check")
+def github_token_check(workspace_id: str):
+    """
+    Run (and cache) the GitHub-module / GITHUB_TOKEN check for one workspace.
+    The result is also stored in the in-memory cache so the dashboard reflects
+    it immediately without waiting for the next full background scan.
+    """
+    workspace = _get_workspace_or_404(workspace_id)
+    if workspace is None:
+        return jsonify({"error": "Workspace not found"}), 404
+
+    from app.github_module_checker import check_workspace as _check_ws
+    result = _check_ws(
+        workspace_id,
+        workspace["abs_path"],
+        workspace["name"],
+        workspace["relative_path"],
+    )
+    return jsonify(result)
+
+
+@api_bp.route("/github-token-warnings")
+def github_token_warnings_api():
+    """
+    Return all workspaces (from the in-memory cache) that use GitHub-sourced
+    modules but have no GITHUB_TOKEN variable configured.
+    """
+    from app.github_module_checker import get_all_warnings
+    return jsonify({"warnings": get_all_warnings()})
+
+
+@api_bp.route("/backend-config/delete-source", methods=["POST"])
+def delete_source_backend_api():
+    """
+    Delete all data from the old/source backend after a verified migration.
+    Body:
+      { "source_type": "...", "source_creds": { ... } }
+    """
+    from flask import session as _session
+    from app.backend_config import (
+        get_backend_config, decrypt_fields, delete_backend_data,
+        get_migration_source_config, delete_migration_source_config,
+    )
+
+    config = current_app.config["TFG_CONFIG"]
+    enc_key = _session.get("tgm_enc_key", "")
+    body = request.get_json(silent=True) or {}
+
+    source_type = (body.get("source_type") or "local").lower().strip()
+    if source_type == "local":
+        source_creds_raw = {}
+    else:
+        # Prefer the stashed migration-source config so we always delete from
+        # the correct (old) backend even after the new config has been saved.
+        stash = get_migration_source_config(config)
+        if stash and (stash.get("type") or "local").lower() == source_type:
+            source_creds_raw = stash
+        else:
+            source_creds_raw = dict(body.get("source_creds") or get_backend_config(config) or {})
+
+    if source_type not in ("local",) and enc_key:
+        try:
+            source_creds = decrypt_fields(source_creds_raw, source_type, enc_key)
+        except ValueError:
+            return jsonify({"ok": False, "error": "Could not decrypt source credentials."}), 400
+    else:
+        source_creds = source_creds_raw
+
+    result = delete_backend_data(source_type, source_creds)
+    if result.get("ok"):
+        # Migration is complete — remove the stash.
+        delete_migration_source_config(config)
+    return jsonify(result)
+
+
+@api_bp.route("/dashboard/stats", methods=["GET"])
+def dashboard_stats_api():
+    """
+    Return execution statistics for the dashboard using the lightweight
+    workspace last-state cache (O(workspaces), not O(all historical executions)).
+
+    The cache is seeded from storage on startup and updated every time an
+    execution completes, so this endpoint requires no storage I/O at all.
+    """
+    from app.workspace_state import get_all as _get_all_ws_states
+
+    eq = current_app.config["EXECUTION_QUEUE"]
+
+    # Start from the persisted last-state cache
+    ws_latest: dict = _get_all_ws_states()
+
+    # Overlay any in-memory executions (running / queued / just-finished)
+    # so the dashboard reflects live state immediately without waiting for
+    # the cache update that happens in the worker finally-block.
+    for ex in eq.list_all():
+        d = ex.to_dict()
+        d["workspace_path"] = ex.workspace_path
+        wid = ex.workspace_id
+        existing = ws_latest.get(wid)
+        if not existing or d.get("timestamp", "") >= existing.get("timestamp", ""):
+            ws_latest[wid] = d
+
+    total_plans = sum(1 for e in ws_latest.values() if e.get("command") == "plan")
+    total_applies = sum(1 for e in ws_latest.values() if e.get("command") == "apply")
+
+    errored_workspaces = []
+    for wid, e in ws_latest.items():
+        if e.get("status") != "failed":
+            continue
+        wp = e.get("workspace_path", "") or wid
+        errored_workspaces.append({
+            "workspace_id": wid,
+            "workspace_path": wp,
+            "workspace_name": wp.rstrip("/").split("/")[-1] or wid,
+            "execution_id": e.get("id", ""),
+            "command": e.get("command", "plan"),
+            "timestamp": e.get("timestamp", ""),
+        })
+    errored_workspaces.sort(key=lambda x: x["timestamp"], reverse=True)
+
+    return jsonify({
+        "total_plans": total_plans,
+        "total_applies": total_applies,
+        "total_errored": len(errored_workspaces),
+        "errored_workspaces": errored_workspaces,
+        "ws_latest": ws_latest,
+    })
