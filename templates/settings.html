@@ -167,27 +167,53 @@
 
         <!-- Detected versions -->
         <div>
-          <p class="text-sm font-medium text-gray-700 mb-2">Detected versions</p>
-          {% if available_versions %}
-            <div class="space-y-1.5">
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-sm font-medium text-gray-700">Detected versions</p>
+            <button type="button"
+                    @click="openDownloadModal()"
+                    class="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-tf-600 hover:bg-tf-700
+                           text-white text-xs font-medium rounded-lg transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+              </svg>
+              <span>Download &amp; Install</span>
+            </button>
+          </div>
+          <div id="installed-versions-list" class="space-y-1.5">
+            {% if available_versions %}
               {% for v in available_versions %}
-                <div class="flex items-center space-x-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                <div class="flex items-center space-x-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg"
+                     id="installed-version-{{ v.version }}">
                   <span class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></span>
                   <span class="text-sm font-mono font-medium text-green-800">{{ v.version }}</span>
-                  <span class="text-xs text-green-600 truncate">{{ v.binary }}</span>
+                  <span class="text-xs text-green-600 truncate flex-1">{{ v.binary }}</span>
+                  <button type="button"
+                          @click="uninstallVersion('{{ v.version }}')"
+                          class="ml-auto flex-shrink-0 inline-flex items-center space-x-1 px-2 py-1
+                                 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700
+                                 text-xs font-medium rounded transition-colors"
+                          title="Uninstall {{ v.version }}">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                    <span>Uninstall</span>
+                  </button>
                 </div>
               {% endfor %}
-            </div>
-          {% else %}
-            <div class="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-500">
-              No versions detected.
-              {% if config.terraform_versions_folder %}
-                Check that the folder exists and contains valid subdirectories.
-              {% else %}
-                Configure a versions folder above to enable version management.
-              {% endif %}
-            </div>
-          {% endif %}
+            {% else %}
+              <div class="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-500"
+                   id="no-versions-msg">
+                No versions detected.
+                {% if config.terraform_versions_folder %}
+                  Check that the folder exists and contains valid subdirectories.
+                {% else %}
+                  Configure a versions folder above to enable version management.
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
         </div>
 
         <!-- Default version -->
@@ -1170,6 +1196,235 @@
   </section>
 
   <!-- --------------------------------------------------------
+       Terraform version download modal
+       -------------------------------------------------------- -->
+  <div x-show="tfDownload.open" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" style="display:none"
+       @keydown.escape.window="tfDownload.open = false">
+    <div @click.stop class="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+      <!-- Header -->
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+        <h3 class="text-base font-semibold text-gray-900">Download &amp; Install Terraform Versions</h3>
+        <button type="button" @click="tfDownload.open = false" class="text-gray-400 hover:text-gray-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+
+        <!-- External-site notice -->
+        <div class="flex items-start space-x-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <svg class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+          <div class="text-xs text-amber-800 space-y-0.5">
+            <p class="font-semibold">External download source</p>
+            <p>
+              Binaries are fetched directly from
+              <span class="font-mono font-medium" x-text="tfDownload.baseUrl"></span>.
+              This is HashiCorp&rsquo;s official releases server and is generally trusted, but
+              <strong>verify that accessing this URL complies with your organisation&rsquo;s
+              internal Security and Privacy policies</strong> before proceeding.
+            </p>
+          </div>
+        </div>
+
+        <!-- Release source URL -->
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1"
+                 for="tf-dl-base-url">Release source URL</label>
+          <div class="flex items-center space-x-2">
+            <input id="tf-dl-base-url"
+                   type="text"
+                   x-model="tfDownload.baseUrl"
+                   class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-mono
+                          focus:outline-none focus:ring-2 focus:ring-tf-400"
+                   placeholder="https://releases.hashicorp.com/terraform/">
+            <button type="button"
+                    @click="tfDownload.baseUrl = 'https://releases.hashicorp.com/terraform/'"
+                    class="px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50
+                           text-gray-600 transition-colors whitespace-nowrap"
+                    title="Reset to default">
+              Reset
+            </button>
+          </div>
+          <p class="mt-1 text-xs text-gray-400">
+            Change only if HashiCorp moves the releases endpoint or you mirror it internally.
+            Must use HTTPS.
+          </p>
+        </div>
+
+        <!-- Loading state -->
+        <div x-show="tfDownload.loading" class="flex items-center justify-center py-12">
+          <svg class="animate-spin w-6 h-6 text-tf-500 mr-2" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+          <span class="text-sm text-gray-500">Fetching available versions…</span>
+        </div>
+
+        <!-- Error state -->
+        <div x-show="tfDownload.fetchError" class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 space-y-2">
+          <span x-text="tfDownload.fetchError"></span>
+          <div>
+            <button type="button" @click="refreshVersionList()"
+                    class="mt-1 inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium
+                           bg-white border border-red-300 rounded-lg hover:bg-red-50 text-red-700 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              <span>Retry with current URL</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <template x-if="!tfDownload.loading && !tfDownload.fetchError">
+          <div class="space-y-4">
+            <!-- Platform selectors -->
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Operating system</label>
+                <select x-model="tfDownload.os"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white
+                               focus:outline-none focus:ring-2 focus:ring-tf-400">
+                  <option value="linux">linux</option>
+                  <option value="darwin">darwin (macOS)</option>
+                  <option value="windows">windows</option>
+                  <option value="freebsd">freebsd</option>
+                  <option value="openbsd">openbsd</option>
+                  <option value="solaris">solaris</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Architecture</label>
+                <select x-model="tfDownload.arch"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white
+                               focus:outline-none focus:ring-2 focus:ring-tf-400">
+                  <option value="amd64">amd64 (x86_64)</option>
+                  <option value="arm64">arm64 (aarch64)</option>
+                  <option value="386">386 (i386)</option>
+                  <option value="arm">arm</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Filter + select all -->
+            <div class="flex items-center space-x-3">
+              <input type="text" x-model="tfDownload.filter" placeholder="Filter versions…"
+                     class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm
+                            focus:outline-none focus:ring-2 focus:ring-tf-400">
+              <button type="button" @click="tfDownload.selectAll()"
+                      class="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg
+                             hover:bg-gray-50 transition-colors text-gray-700">
+                Select all not installed
+              </button>
+              <button type="button" @click="tfDownload.clearSelection()"
+                      class="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg
+                             hover:bg-gray-50 transition-colors text-gray-700">
+                Clear
+              </button>
+            </div>
+
+            <!-- Version list -->
+            <div class="border border-gray-200 rounded-lg overflow-hidden">
+              <div class="max-h-64 overflow-y-auto divide-y divide-gray-100">
+                <template x-for="v in tfDownload.filteredVersions()" :key="v.version">
+                  <label class="flex items-center px-4 py-2.5 hover:bg-gray-50 cursor-pointer"
+                         :class="v.installed ? 'opacity-60' : ''">
+                    <input type="checkbox"
+                           :value="v.version"
+                           :disabled="v.installed"
+                           x-model="tfDownload.selected"
+                           class="mr-3 h-4 w-4 text-tf-600 rounded border-gray-300">
+                    <span class="text-sm font-mono font-medium flex-1" x-text="v.version"></span>
+                    <span x-show="v.installed"
+                          class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
+                      installed
+                    </span>
+                  </label>
+                </template>
+                <div x-show="tfDownload.filteredVersions().length === 0"
+                     class="px-4 py-6 text-center text-sm text-gray-400">No versions match the filter.</div>
+              </div>
+            </div>
+
+            <!-- Progress / result -->
+            <div x-show="tfDownload.progress.length > 0" class="space-y-1">
+              <template x-for="(msg, idx) in tfDownload.progress" :key="idx">
+                <div class="flex items-center space-x-2 text-xs px-3 py-1.5 rounded"
+                     :class="{
+                       'bg-green-50 text-green-700': msg.status === 'ok',
+                       'bg-red-50 text-red-700':     msg.status === 'error',
+                       'bg-blue-50 text-blue-700':   msg.status === 'info',
+                     }">
+                  <svg x-show="msg.status === 'ok'" class="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                  </svg>
+                  <svg x-show="msg.status === 'error'" class="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                  </svg>
+                  <svg x-show="msg.status === 'info'" class="animate-spin w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  </svg>
+                  <span x-text="msg.text"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Footer -->
+      <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
+        <div class="flex items-center space-x-3">
+          <span class="text-xs text-gray-500">
+            <span x-text="tfDownload.selected.length"></span> selected
+          </span>
+          <button type="button"
+                  @click="refreshVersionList()"
+                  :disabled="tfDownload.loading"
+                  title="Reload the version list using the current source URL"
+                  class="inline-flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium
+                         border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600
+                         transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <span>Reload list</span>
+          </button>
+        </div>
+        <div class="flex items-center space-x-3">
+          <button type="button" @click="tfDownload.open = false"
+                  class="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300
+                         rounded-lg hover:bg-gray-50 transition-colors">
+            Close
+          </button>
+          <button type="button"
+                  @click="installSelected()"
+                  :disabled="tfDownload.selected.length === 0 || tfDownload.installing"
+                  class="inline-flex items-center space-x-2 px-4 py-2 text-sm font-medium
+                         bg-tf-600 hover:bg-tf-700 text-white rounded-lg transition-colors
+                         disabled:opacity-50 disabled:cursor-not-allowed">
+            <svg x-show="tfDownload.installing" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+            <span x-text="tfDownload.installing ? 'Installing…' : 'Download &amp; Install'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- --------------------------------------------------------
        Migration confirmation modal
        -------------------------------------------------------- -->
   <div x-data x-show="$store.bcMigration.open"
@@ -1617,6 +1872,37 @@
       sentinelSets: [],
       sentinelSetsLoaded: false,
 
+      // Terraform version download
+      tfDownload: {
+        open: false,
+        loading: false,
+        fetchError: '',
+        versions: [],     // [{version, installed}]
+        selected: [],
+        filter: '',
+        os: 'linux',
+        arch: 'amd64',
+        installing: false,
+        progress: [],
+        baseUrl: 'https://releases.hashicorp.com/terraform/',
+
+        filteredVersions() {
+          const q = this.filter.trim().toLowerCase();
+          if (!q) return this.versions;
+          return this.versions.filter(v => v.version.includes(q));
+        },
+
+        selectAll() {
+          this.selected = this.versions
+            .filter(v => !v.installed)
+            .map(v => v.version);
+        },
+
+        clearSelection() {
+          this.selected = [];
+        },
+      },
+
       async init() {
         this.loadSentinelSets();
       },
@@ -1666,6 +1952,178 @@
         const enabled = all.filter(s => s.enabled);
         if (all.length === 0 || enabled.length === all.length) return '';
         return enabled.map(s => s.name).join(',');
+      },
+
+      // ---------------------------------------------------------------
+      // Terraform version download / uninstall
+      // ---------------------------------------------------------------
+
+      async openDownloadModal() {
+        this.tfDownload.open = true;
+        this.tfDownload.loading = true;
+        this.tfDownload.fetchError = '';
+        this.tfDownload.versions = [];
+        this.tfDownload.selected = [];
+        this.tfDownload.progress = [];
+        try {
+          const params = new URLSearchParams({ base_url: this.tfDownload.baseUrl });
+          const r = await fetch(`/api/terraform-versions/available?${params}`);
+          const d = await r.json();
+          if (!r.ok) {
+            this.tfDownload.fetchError = d.error || 'Failed to fetch versions.';
+            return;
+          }
+          this.tfDownload.versions = d.versions;
+          this.tfDownload.os = d.default_os || 'linux';
+          this.tfDownload.arch = d.default_arch || 'amd64';
+        } catch(e) {
+          this.tfDownload.fetchError = String(e);
+        } finally {
+          this.tfDownload.loading = false;
+        }
+      },
+
+      async refreshVersionList() {
+        this.tfDownload.loading = true;
+        this.tfDownload.fetchError = '';
+        this.tfDownload.versions = [];
+        this.tfDownload.selected = [];
+        try {
+          const params = new URLSearchParams({ base_url: this.tfDownload.baseUrl });
+          const r = await fetch(`/api/terraform-versions/available?${params}`);
+          const d = await r.json();
+          if (!r.ok) {
+            this.tfDownload.fetchError = d.error || 'Failed to fetch versions.';
+            return;
+          }
+          this.tfDownload.versions = d.versions;
+        } catch(e) {
+          this.tfDownload.fetchError = String(e);
+        } finally {
+          this.tfDownload.loading = false;
+        }
+      },
+
+      async installSelected() {
+        if (this.tfDownload.selected.length === 0) return;
+        this.tfDownload.installing = true;
+        this.tfDownload.progress = this.tfDownload.selected.map(v => ({
+          version: v, status: 'info', text: `Installing ${v}…`,
+        }));
+        try {
+          const r = await fetch('/api/terraform-versions/install', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              versions: this.tfDownload.selected,
+              os: this.tfDownload.os,
+              arch: this.tfDownload.arch,
+              base_url: this.tfDownload.baseUrl,
+            }),
+          });
+          const d = await r.json();
+          const progressMap = {};
+          (d.installed || []).forEach(item => {
+            progressMap[item.version] = {
+              status: 'ok',
+              text: item.status === 'already_installed'
+                ? `${item.version} — already installed`
+                : `${item.version} — installed successfully`,
+            };
+          });
+          (d.errors || []).forEach(item => {
+            progressMap[item.version] = { status: 'error', text: `${item.version} — ${item.error}` };
+          });
+          this.tfDownload.progress = this.tfDownload.selected.map(v =>
+            progressMap[v] || { status: 'error', text: `${v} — unknown error` }
+          );
+
+          // Mark newly installed as installed in the list
+          const newlyInstalled = (d.installed || [])
+            .filter(i => i.status === 'installed')
+            .map(i => i.version);
+          if (newlyInstalled.length > 0) {
+            this.tfDownload.versions = this.tfDownload.versions.map(v => ({
+              ...v,
+              installed: v.installed || newlyInstalled.includes(v.version),
+            }));
+            this.tfDownload.selected = this.tfDownload.selected.filter(
+              v => !newlyInstalled.includes(v)
+            );
+            // Refresh the page installed versions list
+            this._addInstalledVersionRows(newlyInstalled);
+          }
+        } catch(e) {
+          this.tfDownload.progress = [{ status: 'error', text: String(e) }];
+        } finally {
+          this.tfDownload.installing = false;
+        }
+      },
+
+      async uninstallVersion(version) {
+        if (!confirm(`Uninstall Terraform ${version}?\nThis will delete the binary from the versions folder.`)) return;
+        try {
+          const r = await fetch(`/api/terraform-versions/uninstall/${encodeURIComponent(version)}`, {
+            method: 'DELETE',
+          });
+          const d = await r.json();
+          if (r.ok) {
+            // Remove the card from the DOM
+            const card = document.getElementById(`installed-version-${version}`);
+            if (card) card.remove();
+            // If no versions remain, show the empty message
+            const list = document.getElementById('installed-versions-list');
+            if (list && list.querySelectorAll('[id^="installed-version-"]').length === 0) {
+              const msg = document.createElement('div');
+              msg.id = 'no-versions-msg';
+              msg.className = 'px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-500';
+              msg.textContent = 'No versions detected.';
+              list.appendChild(msg);
+            }
+          } else {
+            const msg = d.error || 'Uninstall failed.';
+            const blocking = d.blocking_workspaces;
+            if (blocking && blocking.length) {
+              alert(`${msg}\n\nWorkspaces:\n${blocking.join('\n')}`);
+            } else {
+              alert(msg);
+            }
+          }
+        } catch(e) {
+          alert(String(e));
+        }
+      },
+
+      _addInstalledVersionRows(versions) {
+        const list = document.getElementById('installed-versions-list');
+        if (!list) return;
+        // Remove empty-state message if present
+        const emptyMsg = document.getElementById('no-versions-msg');
+        if (emptyMsg) emptyMsg.remove();
+        for (const ver of versions) {
+          if (document.getElementById(`installed-version-${ver}`)) continue;
+          const div = document.createElement('div');
+          div.id = `installed-version-${ver}`;
+          div.className = 'flex items-center space-x-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg';
+          div.innerHTML = `
+            <span class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></span>
+            <span class="text-sm font-mono font-medium text-green-800">${ver}</span>
+            <span class="text-xs text-green-600 truncate flex-1"></span>
+            <button type="button" @click="uninstallVersion('${ver}')"
+                    class="ml-auto flex-shrink-0 inline-flex items-center space-x-1 px-2 py-1
+                           bg-red-50 hover:bg-red-100 border border-red-200 text-red-700
+                           text-xs font-medium rounded transition-colors">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+              <span>Uninstall</span>
+            </button>
+          `;
+          list.appendChild(div);
+          // Initialize Alpine on the new node
+          if (window.Alpine) Alpine.initTree(div);
+        }
       },
     };
   }
