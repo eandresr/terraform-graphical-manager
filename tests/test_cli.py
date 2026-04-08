@@ -110,9 +110,6 @@ class TestStartEnvVars:
 
 class TestMainFunction:
     def test_main_start_calls_socketio_run(self):
-        mock_socketio = MagicMock()
-        mock_app = MagicMock()
-
         with patch("app.cli._cmd_start") as mock_cmd:
             main(["start", "--port", "6000"])
             mock_cmd.assert_called_once()

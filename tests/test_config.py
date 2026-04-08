@@ -1,7 +1,6 @@
 """
 Tests for app/config.py — Config class.
 """
-import configparser
 import os
 
 import pytest

@@ -51,7 +51,6 @@ class TestArgumentParser:
         assert args.debug is True
 
     def test_port_must_be_integer(self):
-        import argparse
         with pytest.raises(SystemExit):
             self._parser().parse_args(["--port", "notanumber"])
 

@@ -4,8 +4,6 @@ Tests for app/version_manager.py — discover_versions(), get_terraform_binary()
 import os
 import stat
 
-import pytest
-
 from app.version_manager import discover_versions, get_terraform_binary
 
 

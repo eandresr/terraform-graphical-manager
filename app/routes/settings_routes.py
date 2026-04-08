@@ -2,7 +2,18 @@
 Settings Routes — UI page for editing tfg.conf visually.
 """
 import os
-from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash
+import platform
+import shutil
+import stat
+import tempfile
+import zipfile
+from html.parser import HTMLParser
+from urllib.request import urlopen, Request
+from urllib.error import URLError
+
+from flask import (
+    Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for,
+)
 
 from app.version_manager import discover_versions, get_system_version
 from app.sentinel_runner import sentinel_available, discover_policy_sets, get_sentinel_binary
@@ -242,3 +253,252 @@ def settings_save():
         flash(f"Error saving settings: {exc}", "error")
 
     return redirect(url_for("settings.settings_page"))
+
+
+# ---------------------------------------------------------------------------
+# Terraform version download / install / uninstall helpers
+# ---------------------------------------------------------------------------
+
+_HASHICORP_DEFAULT_BASE = "https://releases.hashicorp.com/terraform/"
+
+
+def _validate_base_url(url: str) -> str:
+    """Ensure the URL is HTTPS and strip trailing slash."""
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("Base URL must use HTTPS.")
+    if not parsed.netloc:
+        raise ValueError("Base URL must include a hostname.")
+    return url.rstrip("/")
+
+
+def _platform_for_download():
+    """Return (os_str, arch_str) matching HashiCorp naming."""
+    system = platform.system().lower()
+    if system == "darwin":
+        os_str = "darwin"
+    elif system == "windows":
+        os_str = "windows"
+    else:
+        os_str = "linux"
+
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        arch_str = "amd64"
+    elif machine in ("aarch64", "arm64"):
+        arch_str = "arm64"
+    elif machine in ("i386", "i686", "x86"):
+        arch_str = "386"
+    else:
+        arch_str = machine  # best effort
+
+    return os_str, arch_str
+
+
+class _VersionLinkParser(HTMLParser):
+    """Extracts version strings from any releases index page."""
+    def __init__(self):
+        super().__init__()
+        self.versions = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "a":
+            for name, val in attrs:
+                if name == "href" and val:
+                    # Accept both absolute and relative hrefs; extract the last
+                    # path segment that looks like a stable semver (X.Y.Z).
+                    segments = val.strip("/").split("/")
+                    for seg in reversed(segments):
+                        parts = seg.split(".")
+                        if (len(parts) == 3
+                                and all(p.isdigit() for p in parts)):
+                            self.versions.append(seg)
+                            break
+
+
+def _fetch_available_versions(base_url: str):
+    """Scrape a releases index page; return sorted list newest-first."""
+    url = base_url.rstrip("/") + "/"
+    req = Request(url, headers={"User-Agent": "terraform-graphical-manager/1"})
+    with urlopen(req, timeout=10) as resp:
+        html = resp.read().decode("utf-8", errors="replace")
+    parser = _VersionLinkParser()
+    parser.feed(html)
+    versions = sorted(set(parser.versions),
+                      key=lambda v: tuple(int(x) for x in v.split(".")),
+                      reverse=True)
+    return versions
+
+
+def _build_zip_url(base_url: str, ver: str, os_str: str, arch: str) -> str:
+    """Construct the zip download URL relative to the configured base URL."""
+    root = base_url.rstrip("/")
+    return f"{root}/{ver}/terraform_{ver}_{os_str}_{arch}.zip"
+
+
+# ---------------------------------------------------------------------------
+# API: list remote versions with installed flag
+# ---------------------------------------------------------------------------
+
+@settings_bp.route("/api/terraform-versions/available", methods=["GET"])
+def api_tf_versions_available():
+    config = current_app.config["TFG_CONFIG"]
+    raw_base = request.args.get("base_url", "").strip() or _HASHICORP_DEFAULT_BASE
+    try:
+        base_url = _validate_base_url(raw_base)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    try:
+        remote = _fetch_available_versions(base_url)
+    except URLError as exc:
+        return jsonify({"error": f"Could not reach {base_url}: {exc}"}), 502
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    installed_set = {v["version"] for v in discover_versions(config.terraform_versions_folder)}
+
+    default_os, default_arch = _platform_for_download()
+
+    data = [
+        {"version": v, "installed": v in installed_set}
+        for v in remote
+    ]
+    return jsonify({
+        "versions": data,
+        "default_os": default_os,
+        "default_arch": default_arch,
+        "base_url": base_url,
+    })
+
+
+# ---------------------------------------------------------------------------
+# API: download + install selected versions
+# ---------------------------------------------------------------------------
+
+@settings_bp.route("/api/terraform-versions/install", methods=["POST"])
+def api_tf_versions_install():
+    config = current_app.config["TFG_CONFIG"]
+    body = request.get_json(force=True, silent=True) or {}
+    versions_to_install = body.get("versions", [])
+    os_str = body.get("os", "")
+    arch = body.get("arch", "")
+    raw_base = (body.get("base_url", "") or "").strip() or _HASHICORP_DEFAULT_BASE
+
+    if not versions_to_install:
+        return jsonify({"error": "No versions specified"}), 400
+    if not os_str or not arch:
+        return jsonify({"error": "os and arch are required"}), 400
+
+    try:
+        base_url = _validate_base_url(raw_base)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    # Validate inputs — only allow safe characters to prevent path traversal
+    import re as _re
+    safe_pat = _re.compile(r"^[a-z0-9_.]+$")
+    for ver in versions_to_install:
+        if not safe_pat.match(ver):
+            return jsonify({"error": f"Invalid version: {ver}"}), 400
+    if not safe_pat.match(os_str) or not safe_pat.match(arch):
+        return jsonify({"error": "Invalid os or arch"}), 400
+
+    versions_folder = config.terraform_versions_folder
+    if not versions_folder:
+        return jsonify({"error": "versions_folder is not configured"}), 400
+
+    os.makedirs(versions_folder, exist_ok=True)
+
+    installed = []
+    errors = []
+
+    for ver in versions_to_install:
+        zip_url = _build_zip_url(base_url, ver, os_str, arch)
+        dest_dir = os.path.join(versions_folder, ver)
+        binary_name = "terraform.exe" if os_str == "windows" else "terraform"
+        dest_binary = os.path.join(dest_dir, binary_name)
+
+        if os.path.isfile(dest_binary):
+            installed.append({"version": ver, "status": "already_installed"})
+            continue
+
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                zip_path = os.path.join(tmpdir, f"terraform_{ver}.zip")
+                req = Request(zip_url, headers={"User-Agent": "terraform-graphical-manager/1"})
+                with urlopen(req, timeout=120) as resp, open(zip_path, "wb") as fh:
+                    shutil.copyfileobj(resp, fh)
+
+                with zipfile.ZipFile(zip_path) as zf:
+                    members = [m for m in zf.namelist()
+                               if os.path.basename(m) == binary_name and not m.endswith("/")]
+                    if not members:
+                        raise ValueError(f"Binary '{binary_name}' not found in zip")
+                    os.makedirs(dest_dir, exist_ok=True)
+                    zf.extract(members[0], tmpdir)
+                    extracted = os.path.join(tmpdir, members[0])
+                    shutil.move(extracted, dest_binary)
+
+            # chmod +x
+            st = os.stat(dest_binary)
+            os.chmod(dest_binary, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            installed.append({"version": ver, "status": "installed"})
+        except Exception as exc:
+            # Clean up partial install
+            if os.path.isdir(dest_dir) and not os.listdir(dest_dir):
+                shutil.rmtree(dest_dir, ignore_errors=True)
+            errors.append({"version": ver, "error": str(exc)})
+
+    status_code = 200 if not errors else (207 if installed else 500)
+    return jsonify({"installed": installed, "errors": errors}), status_code
+
+
+# ---------------------------------------------------------------------------
+# API: uninstall a version
+# ---------------------------------------------------------------------------
+
+@settings_bp.route("/api/terraform-versions/uninstall/<version>", methods=["DELETE"])
+def api_tf_versions_uninstall(version):
+    import re as _re
+    if not _re.match(r"^[0-9]+\.[0-9]+\.[0-9]+$", version):
+        return jsonify({"error": "Invalid version string"}), 400
+
+    config = current_app.config["TFG_CONFIG"]
+    versions_folder = config.terraform_versions_folder
+    if not versions_folder:
+        return jsonify({"error": "versions_folder is not configured"}), 400
+
+    # Find the on-disk directory for this version (may use dots or underscores)
+    from app.version_manager import discover_versions as _disc
+    match_dir = None
+    for v in _disc(versions_folder):
+        if v["version"] == version:
+            match_dir = v["dir_name"]
+            break
+    if match_dir is None:
+        return jsonify({"error": f"Version {version} is not installed"}), 404
+
+    # Validate: no workspace's last run used this version
+    from app.workspace_state import get_all as _ws_get_all
+    last_states = _ws_get_all()
+    blocking = [
+        ws_id for ws_id, state in last_states.items()
+        if state.get("terraform_version") == version
+    ]
+    if blocking:
+        return jsonify({
+            "error": (
+                f"Version {version} is still the last-used version"
+                f" for {len(blocking)} workspace(s)."
+            ),
+            "blocking_workspaces": blocking,
+        }), 409
+
+    target = os.path.join(versions_folder, match_dir)
+    try:
+        shutil.rmtree(target)
+    except Exception as exc:
+        return jsonify({"error": f"Could not remove directory: {exc}"}), 500
+
+    return jsonify({"uninstalled": version}), 200
