@@ -380,7 +380,7 @@ def api_tf_versions_install():
     body = request.get_json(force=True, silent=True) or {}
     versions_to_install = body.get("versions", [])
     os_str = body.get("os", "")
-    arch   = body.get("arch", "")
+    arch = body.get("arch", "")
     raw_base = (body.get("base_url", "") or "").strip() or _HASHICORP_DEFAULT_BASE
 
     if not versions_to_install:
