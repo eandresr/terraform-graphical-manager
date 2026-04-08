@@ -11,7 +11,9 @@ from html.parser import HTMLParser
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 
-from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash, jsonify
+from flask import (
+    Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for,
+)
 
 from app.version_manager import discover_versions, get_system_version
 from app.sentinel_runner import sentinel_available, discover_policy_sets, get_sentinel_binary
@@ -486,7 +488,10 @@ def api_tf_versions_uninstall(version):
     ]
     if blocking:
         return jsonify({
-            "error": f"Version {version} is still the last-used version for {len(blocking)} workspace(s).",
+            "error": (
+                f"Version {version} is still the last-used version"
+                f" for {len(blocking)} workspace(s)."
+            ),
             "blocking_workspaces": blocking,
         }), 409
 

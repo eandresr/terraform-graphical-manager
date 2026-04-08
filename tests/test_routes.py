@@ -3,8 +3,6 @@ Tests for the Flask routes — uses the test client from conftest.py.
 """
 import json
 
-import pytest
-
 
 class TestDashboardRoute:
     def test_dashboard_returns_200(self, client):

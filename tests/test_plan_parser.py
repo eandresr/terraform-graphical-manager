@@ -1,7 +1,6 @@
 """
 Tests for app/plan_parser.py — parse_plan() and helpers.
 """
-import pytest
 from app.plan_parser import parse_plan
 
 
@@ -32,7 +31,8 @@ class TestParsePlanEmpty:
     def test_empty_resource_changes(self):
         result = parse_plan({"resource_changes": []})
         assert result["total_changes"] == 0
-        assert result["counts"] == {"create": 0, "update": 0, "delete": 0, "replace": 0, "no-op": 0}
+        expected_counts = {"create": 0, "update": 0, "delete": 0, "replace": 0, "no-op": 0}
+        assert result["counts"] == expected_counts
 
 
 class TestParsePlanCounts:
