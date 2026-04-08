@@ -274,6 +274,97 @@ export) and alerting (notification channels) baked in.
 
 ---
 
+## [0.5.0] — 2026-04-08
+
+### Added
+
+#### Terraform Version Download & Install (`app/routes/settings_routes.py`, `templates/settings.html`)
+- New **Download & Install** button in **Settings → Terraform Versions** next to the
+  "Detected versions" heading, opening a full download modal.
+- **Download modal** features:
+  - **Amber security/privacy notice** — informs users that version metadata is fetched
+    from an external HashiCorp URL and that they are responsible for verifying authenticity.
+  - **Editable release source URL** — pre-filled with
+    `https://releases.hashicorp.com/terraform/`; a **Reset** button restores the default.
+    Allows pointing at an internal mirror without code changes.
+  - **OS + architecture selectors** — auto-detected from the server platform on open;
+    can be overridden manually (e.g. cross-download for a different target OS).
+  - **Version list** — fetched live from the release index; already-installed versions
+    are marked with a green "installed" badge; a text filter narrows the list.
+  - **Multi-select** with "Select all" / "Clear" controls.
+  - **Progress bar** — shows per-version download progress during bulk installs.
+  - **Reload list** button to refresh available versions using the current source URL.
+- **Uninstall** button on every installed-version card; blocked with an informative
+  error (HTTP 409) when any workspace's last run used that version.
+- New REST API endpoints:
+  - `GET  /api/terraform-versions/available?base_url=…` — scrapes the release index,
+    returns version list with `installed` flags, `default_os`, `default_arch`, and the
+    resolved `base_url`.
+  - `POST /api/terraform-versions/install` — body: `{versions, os, arch, base_url}`;
+    downloads and extracts selected versions; returns per-version success/skip/error
+    results. Uses HTTP 207 when at least one version failed.
+  - `DELETE /api/terraform-versions/uninstall/<version>` — removes the version directory
+    after validating no workspace's last run depends on it (HTTP 409 if blocked).
+- **Security hardening**: `base_url` is validated to be HTTPS-only with a non-empty
+  hostname; `version`, `os`, and `arch` parameters are constrained to
+  `^[a-z0-9_.]+$` — path traversal is rejected with HTTP 400.
+
+#### Execution Statistics & Metrics — API endpoints (`app/routes/api_routes.py`)
+- `GET /api/workspace/{id}/stats` — time-series execution statistics (duration trend +
+  resource change counts) for the Overview tab charts.
+  - Filters to terminal statuses (`completed`, `failed`) only.
+  - Returns up to the last 50 runs, sorted chronologically by timestamp.
+  - Falls back to the local filesystem backend when the configured cloud backend returns
+    an empty list.
+- `GET  /api/metrics-config` — return the global metrics export configuration.
+- `POST /api/metrics-config` — persist global metrics configuration to `tfg.conf`.
+- `GET  /api/workspace/{id}/metrics-config` — read the per-workspace metrics opt-out flag.
+- `POST /api/workspace/{id}/metrics-config` — toggle `metrics_enabled` per workspace.
+
+### Fixed
+
+#### `flake8 --max-line-length=99` now passes with zero errors across `app/`, `tests/`, and `run.py`
+- `app/routes/settings_routes.py` L14 E501: Flask import split into a multi-line block.
+- `app/routes/settings_routes.py` L383 E221: extra alignment spaces before `=` removed.
+- `app/routes/settings_routes.py` L489 E501: long 409 error string split across two lines.
+- `tests/`: removed unused imports (`pytest`, `configparser`, `argparse`, `MagicMock`,
+  `_HASHICORP_DEFAULT_BASE`); wrapped long assertion lines; added missing blank line before
+  nested `def`; moved `contextmanager`/`PropertyMock` imports to module top-level in
+  `test_terraform_version_manager.py`.
+
+### Tests
+
+#### `tests/test_metrics_routes.py` — 18 new tests (5 suites)
+- `TestWorkspaceStats` (7): unknown workspace → 404; empty series; non-terminal statuses
+  filtered; chronological sort; truncation to last 50 runs; local backend fallback;
+  series entry field schema.
+- `TestGlobalMetricsConfigGet` (2): all expected keys present; correct default values.
+- `TestGlobalMetricsConfigPost` (3): returns `ok: true`; keys passed to `config.save()`;
+  HTTP 500 when `save()` raises.
+- `TestWorkspaceMetricsConfigGet` (3): defaults to `true`; reads stored `false`; returns
+  `true` when backend raises.
+- `TestWorkspaceMetricsConfigPost` (3): disable, enable, HTTP 500 on backend error.
+
+#### `tests/test_metrics_exporter.py` — 34 new tests (8 suites)
+- `TestResourceCounts` (3): zero defaults; field mapping; `update + replace → change`.
+- `TestTsNs` (3): valid ISO timestamp; invalid string fallback; missing key fallback.
+- `TestSafeTag` (3): spaces, commas, equals characters are escaped.
+- `TestSanitizeGraphitePath` (3): dots, spaces/slashes replaced; empty string → `unknown`.
+- `TestExportExecutionMetrics` (7): skips when disabled / blank backend / per-workspace
+  opt-out; routes to all three backends; exceptions are swallowed silently.
+- `TestSendInfluxdb` (5): skips without URL or token; correct write URL built; line-protocol
+  body content; `Authorization: Token …` header.
+- `TestSendPrometheus` (5): skips without URL; push URL includes job/instance; Prometheus
+  exposition format; Basic Auth header; no auth header when username blank.
+- `TestSendGraphite` (5): skips without host; TCP socket used by default; metric line
+  format; UDP socket used when protocol is `udp`; workspace ID sanitised in path.
+
+### Changed
+
+- **`pyproject.toml`** — version `1.2.0 → 0.5.0`.
+
+---
+
 ## [0.4.0] — 2026-04-07
 
 ### Fixed
