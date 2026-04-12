@@ -49,6 +49,12 @@ def _make_config(**kwargs):
     cfg.metrics_graphite_host = kwargs.get("metrics_graphite_host", "graphite.example.com")
     cfg.metrics_graphite_port = kwargs.get("metrics_graphite_port", 2003)
     cfg.metrics_graphite_protocol = kwargs.get("metrics_graphite_protocol", "tcp")
+
+    # resolve_sensitive(section, key, enc_key) — return the matching cfg attribute
+    def _resolve(section, key, enc_key=""):
+        return getattr(cfg, f"{section}_{key}", "") or ""
+    cfg.resolve_sensitive.side_effect = _resolve
+
     return cfg
 
 
@@ -202,7 +208,7 @@ class TestExportExecutionMetrics:
         with patch("app.storage.get_backend", return_value=b), \
              patch("app.metrics_exporter._send_influxdb") as mock_influx:
             export_execution_metrics(_BASE_META, cfg, "my-ws")
-        mock_influx.assert_called_once_with(_BASE_META, cfg, "my-ws")
+        mock_influx.assert_called_once_with(_BASE_META, cfg, "my-ws", enc_key="")
 
     def test_routes_to_prometheus(self):
         cfg = _make_config(metrics_backend="prometheus")
@@ -210,7 +216,7 @@ class TestExportExecutionMetrics:
         with patch("app.storage.get_backend", return_value=b), \
              patch("app.metrics_exporter._send_prometheus") as mock_prom:
             export_execution_metrics(_BASE_META, cfg, "ws")
-        mock_prom.assert_called_once_with(_BASE_META, cfg, "ws")
+        mock_prom.assert_called_once_with(_BASE_META, cfg, "ws", enc_key="")
 
     def test_routes_to_graphite(self):
         cfg = _make_config(metrics_backend="graphite")
