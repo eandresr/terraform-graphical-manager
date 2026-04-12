@@ -12,6 +12,7 @@
     <a href="#-variable-groups">Variable Groups</a> ·
     <a href="#-workspace-variables">Workspace Variables</a> ·
     <a href="#-portal-security">Portal Security</a> ·
+    <a href="#-hashicorp-vault">HashiCorp Vault</a> ·
     <a href="#-metrics-export">Metrics Export</a> ·
     <a href="#-notification-channels">Notifications</a> ·
     <a href="#%EF%B8%8F-backend-configuration-ui">Backend Config UI</a> ·
@@ -47,7 +48,8 @@ No cloud account required. No authentication. No internet needed. Runs entirely 
 | **Variable Groups** | Named sets of Terraform/env variables applied to one or more workspaces · global or workspace-scoped · Dedicated **sidebar panel** (accessible from any page) with create/edit/delete + "Used in" workspace viewer |
 | **Workspace Variables** | Individual key-value variables scoped to a single workspace · Stored in `workspace_config.json` · Injected on every run |
 | **Portal Security** | Optional password lock · Fernet-based encryption of sensitive variable values · Auto re-encryption when password changes · Safe "remove lock" modal with option to decrypt values to plaintext |
-| **Settings UI** | Visual panel to edit all `tfg.conf` settings · Backend checklist · Site name customization |
+| **HashiCorp Vault** | Optional external secrets backend · Stores all sensitive values in Vault KV-v2 · `vault:` reference scheme · Covers variable groups, workspace vars, backend credentials, notification secrets, and metrics tokens · Bidirectional one-click migration (to Vault / from Vault) · UI panel in Settings |
+| **Settings UI** | Visual panel to edit all `tfg.conf` settings · **Sticky in-page navigation sidebar** with 8 sections · Backend checklist · Site name customization |
 | **Storage backends** | Local filesystem · AWS S3 · GCP Cloud Storage · Azure Blob Storage |
 | **Credential isolation** | Each execution runs with its own isolated environment — no credential leakage |
 | **Execution statistics** | Per-workspace run history charts (duration trend, resource-change counts) rendered with Chart.js in the Overview tab |
@@ -528,6 +530,60 @@ Workspace variables are stored inside `workspace_config.json` in the workspace's
 |---|---|---|
 | `GET` | `/api/workspace/{id}/vars` | Get all variables for the workspace (sensitive values masked) |
 | `PUT` | `/api/workspace/{id}/vars` | Save variables (sensitive values are encrypted; omitting a value preserves the existing encrypted blob) |
+
+---
+
+## 🏛️ HashiCorp Vault
+
+TGM can use a **HashiCorp Vault** server as an optional external secrets backend.
+When enabled, sensitive values that would normally be Fernet-encrypted in `tfg.conf`
+or JSON storage files are written to Vault's KV-v2 engine and replaced with
+`vault:kv/path/to/secret#field` references. TGM resolves them transparently at runtime.
+
+### What is stored in Vault
+
+| Category | Vault path pattern |
+|---|---|
+| Variable group sensitive vars | `{mount}/tgm/variable-groups/{group-id}/{var-name}` |
+| Workspace variable sensitive vars | `{mount}/tgm/workspaces/{workspace-id}/{var-name}` |
+| Storage backend credentials | `{mount}/tgm/backend-credentials/{field}` |
+| Notification channel secrets | `{mount}/tgm/notification-channels/{channel-id}/{field}` |
+| Metrics export tokens/passwords | `{mount}/tgm/metrics/{field}` |
+
+### Enabling Vault
+
+1. Open **Settings → HashiCorp Vault**.
+2. Enter your Vault **address**, **token**, **KV-v2 mount** (default: `secret`), and
+   optionally a **namespace** (Vault Enterprise).
+3. Click **Test connection** to verify connectivity.
+4. Toggle **Enable Vault secrets backend** and save (requires a portal password).
+
+> A portal password must be set before Vault can be enabled — the portal password
+> is used to encrypt the Vault token at rest in `tfg.conf`.
+
+### Migration
+
+**Migrate to Vault** — reads all existing Fernet-encrypted values from `tfg.conf` and
+backed storage files, writes them to Vault, and replaces the originals with `vault:` refs.
+A styled confirmation modal lists the scope before the operation runs.
+
+**Migrate from Vault** — reads all `vault:` references, fetches the plaintext from Vault,
+re-encrypts with Fernet, and removes the secrets from Vault.
+
+Both operations are atomic per-resource and report counts of migrated / skipped items.
+
+### Credential handling during password change
+
+When the portal password is changed, the re-encryption pass detects and skips `vault:` refs
+(there is nothing to re-encrypt — the secret lives in Vault). Only Fernet blobs are moved
+to the new key.
+
+### Vault resolution order
+
+```
+Vault disabled → Fernet-encrypted blob (`enc:…`) or plaintext
+Vault enabled  → `vault:` reference resolved via hvac client at call time
+```
 
 ---
 

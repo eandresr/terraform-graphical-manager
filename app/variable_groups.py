@@ -70,7 +70,21 @@ def save_group(
     if not group_data.get("id"):
         group_data = {**group_data, "id": str(uuid.uuid4())}
 
+    # Determine if Vault is enabled for secrets storage
+    _vault_enabled = False
+    _vault_config = None
+    try:
+        from flask import current_app
+        _vault_config = current_app.config.get("TFG_CONFIG")
+        if _vault_config is not None:
+            _vault_enabled = _vault_config.vault_enabled
+    except Exception:
+        pass
+
     encrypted_vars: List[Dict[str, Any]] = []
+    group_id = group_data.get("id") or str(uuid.uuid4())
+    if not group_data.get("id"):
+        group_data = {**group_data, "id": group_id}
     for var in group_data.get("variables", []):
         var = dict(var)
         if var.get("sensitive"):
@@ -80,7 +94,14 @@ def save_group(
                 )
             new_val: str = (var.get("value") or "").strip()
             if new_val:
-                var["value"] = encrypt(new_val, password)
+                if _vault_enabled and _vault_config is not None:
+                    from app.vault_manager import store_secret, var_group_path
+                    path = var_group_path(
+                        _vault_config.vault_path_prefix, group_id, var.get("key", "")
+                    )
+                    var["value"] = store_secret(_vault_config, password, path, new_val)
+                else:
+                    var["value"] = encrypt(new_val, password)
             elif existing_group:
                 old = next(
                     (v for v in existing_group.get("variables", [])
@@ -218,12 +239,23 @@ def get_vars_for_workspace(
                 is_sensitive: bool = var.get("sensitive", False)
 
                 if is_sensitive:
-                    if not password or not raw_value:
+                    if not raw_value:
                         continue
-                    try:
-                        value = decrypt(raw_value, password)
-                    except ValueError:
-                        continue
+                    from app.vault_manager import is_vault_ref, resolve_secret
+                    if is_vault_ref(raw_value):
+                        try:
+                            from flask import current_app
+                            cfg = current_app.config.get("TFG_CONFIG")
+                            value = resolve_secret(cfg, password, raw_value)
+                        except Exception:
+                            continue
+                    else:
+                        if not password:
+                            continue
+                        try:
+                            value = decrypt(raw_value, password)
+                        except ValueError:
+                            continue
                     sensitive_values.append(value)
                     display_value = "***"
                 else:

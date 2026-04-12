@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] — 2026-04-12
+
+### Added
+
+#### HashiCorp Vault — optional secrets backend
+- New **`app/vault_manager.py`** module integrates with a HashiCorp Vault server as an
+  optional external secrets backend for all sensitive values managed by TGM.
+- When enabled, all secrets that would normally be Fernet-encrypted in `tfg.conf` or
+  JSON storage files are stored in Vault under a configurable KV-v2 mount path and
+  resolved at runtime via `vault:kv/path/to/secret#field` references.
+- **Vault scope** covers all sensitive surface areas:
+  - Variable group sensitive values
+  - Per-workspace variable sensitive values
+  - Storage backend credentials (AWS, GCP, Azure)
+  - Notification channel secrets (Slack webhook, Teams webhook, SMTP password,
+    PagerDuty routing key, Alertmanager URL)
+  - Metrics export tokens / passwords (InfluxDB token, Prometheus password, Graphite host)
+- **`config.resolve_sensitive(section, key, enc_key)`** — new method on `AppConfig` that
+  transparently resolves a value whether it is stored as plaintext, as a Fernet blob
+  (`enc:…`), or as a Vault reference (`vault:…`).
+- **Bidirectional migration**: one-click panels in Settings → HashiCorp Vault to:
+  - **Migrate to Vault** — reads all sensitive values from `tfg.conf` / storage,
+    writes them to Vault, then replaces the originals with `vault:` references.
+  - **Migrate from Vault** — reads `vault:` references, fetches the plaintext from
+    Vault, re-encrypts with Fernet, and removes the Vault secrets.
+- **Vault UI section** in Settings with:
+  - Address, token, mount, and namespace inputs
+  - Enable/disable toggle (portal password required to enable)
+  - **Test connection** button
+  - Styled confirmation modals for both migration directions
+- **New REST endpoints**:
+  - `GET  /api/vault/config` — returns Vault config (token masked)
+  - `POST /api/vault/config` — saves Vault configuration
+  - `POST /api/vault/test` — connectivity test
+  - `POST /api/vault/migrate-to-vault` — full migration to Vault
+  - `POST /api/vault/migrate-from-vault` — full migration back to Fernet
+- `hvac` added to `requirements.txt`.
+
+#### Settings page — in-page navigation sidebar
+- The Settings page (`/settings`) now has a **sticky left-sidebar navigation** with links
+  to each of the 8 configuration sections:
+  Workspaces · Execution · Terraform Versions · Sentinel · Portal Security ·
+  Run History · HashiCorp Vault · Storage Backend.
+- Active section is highlighted automatically as the user scrolls, via `IntersectionObserver`
+  (using the `<main>` scroll container as root — correct for the `h-screen overflow-y-auto`
+  base layout).
+- Clicking a nav item smooth-scrolls to the target section without overscroll or page
+  extension artifacts.
+- Sidebar is hidden on screens narrower than `lg` breakpoint (Tailwind `hidden lg:block`).
+- Page max-width widened from `max-w-3xl` to `max-w-[1280px]` to accommodate the sidebar.
+
+#### Flake8 configuration
+- Added `.flake8` config file: `max-line-length = 99`, ignores `E203/W503`, excludes
+  `venv/`, `build/`, `terraform/`, `examples/`, and egg-info directories.
+- Fixed `F401` (unused import `encrypt_fields`) in `app/routes/settings_routes.py`.
+
+### Changed
+
+- **`pyproject.toml`** — version `1.2.0 → 1.3.0`.
+- **`app/notification_manager.py`** — `encrypt_channel_secrets` writes to Vault when
+  enabled; `decrypt_channel_secrets` resolves `vault:` references; `reencrypt_all_sensitive`
+  skips `vault:` refs.
+- **`app/backend_config.py`** — `encrypt_fields` skips existing `vault:` refs;
+  `decrypt_fields` resolves `vault:` refs via `vault_manager.resolve_secret`.
+- **`app/metrics_exporter.py`** — `export_execution_metrics` accepts `enc_key` kwarg;
+  `_send_influxdb` / `_send_prometheus` use `config.resolve_sensitive` for credentials.
+- **`app/execution_queue.py`** — passes `enc_key` to `export_execution_metrics`.
+- **`app/routes/api_routes.py`** — `save_backend_config_api` routes sensitive fields to
+  Vault when enabled; `submit_run` / `save_workspace_vars` detect `vault:` refs.
+- **`app/routes/settings_routes.py`** — Vault API routes (5 endpoints), Vault-aware
+  password-change re-encryption across all secret types.
+
+---
+
 ## [1.2.0] — 2026-04-02
 
 ### Added
@@ -561,6 +635,7 @@ export) and alerting (notification channels) baked in.
 
 ---
 
+[1.3.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/eandresr/terraform-graphical-manager/compare/v0.4.0...v1.0.0

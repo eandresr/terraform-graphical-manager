@@ -394,6 +394,7 @@ class ExecutionQueue:
                         execution.to_dict(),
                         _cfg,
                         _ws_name,
+                        enc_key=execution.enc_key,
                     )
             except Exception:
                 pass

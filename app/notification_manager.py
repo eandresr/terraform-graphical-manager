@@ -121,37 +121,75 @@ def _decrypt_field(value: str, password: str) -> str:
 def encrypt_channel_secrets(channel: Dict[str, Any], password: str) -> Dict[str, Any]:
     """
     Return a copy of *channel* with sensitive config fields encrypted.
-    If a field value is empty its stored value is preserved (blank = keep blob).
+    If Vault is enabled the value is written to Vault and a ``vault:<path>``
+    reference is stored instead of a Fernet blob.  Empty values are preserved.
     """
     channel = _json.loads(_json.dumps(channel))  # deep copy
     cfg = channel.get("config") or {}
     ch_type = (channel.get("type") or "").lower()
     fields = _sensitive_fields_for(ch_type, _resolve_method(ch_type, cfg))
+    channel_id = channel.get("id") or "unknown"
+
+    # Check Vault availability once
+    _vault_cfg = None
+    try:
+        from flask import current_app
+        _vault_cfg = current_app.config.get("TFG_CONFIG")
+    except RuntimeError:
+        pass
+    vault_enabled = _vault_cfg and getattr(_vault_cfg, "vault_enabled", False)
 
     for field in fields:
         raw = (cfg.get(field) or "").strip()
         if not raw:
-            # Preserve existing blob
+            # Preserve existing blob/ref
             continue
-        if raw.startswith(_ENC_PREFIX):
-            # Already encrypted – keep as-is
+        if raw.startswith(_ENC_PREFIX) or raw.startswith("vault:"):
+            # Already encoded – keep as-is
             continue
-        cfg[field] = _encrypt_field(raw, password)
+        if vault_enabled and password:
+            try:
+                from app import vault_manager as _vm
+                path = _vm.notification_channel_path(
+                    _vault_cfg.vault_path_prefix, channel_id, field
+                )
+                cfg[field] = _vm.store_secret(_vault_cfg, password, path, raw)
+            except Exception:
+                cfg[field] = _encrypt_field(raw, password)
+        else:
+            cfg[field] = _encrypt_field(raw, password)
 
     channel["config"] = cfg
     return channel
 
 
 def decrypt_channel_secrets(channel: Dict[str, Any], password: str) -> Dict[str, Any]:
-    """Return a copy of *channel* with sensitive config fields decrypted."""
+    """Return a copy of *channel* with sensitive config fields decrypted.
+    Vault references (``vault:<path>``) are resolved via vault_manager."""
     channel = _json.loads(_json.dumps(channel))
     cfg = channel.get("config") or {}
     ch_type = (channel.get("type") or "").lower()
     fields = _sensitive_fields_for(ch_type, _resolve_method(ch_type, cfg))
 
+    _vault_cfg = None
+    try:
+        from flask import current_app
+        _vault_cfg = current_app.config.get("TFG_CONFIG")
+    except RuntimeError:
+        pass
+
     for field in fields:
         val = cfg.get(field) or ""
-        if val.startswith(_ENC_PREFIX):
+        if val.startswith("vault:"):
+            if _vault_cfg and password:
+                try:
+                    from app import vault_manager as _vm
+                    cfg[field] = _vm.resolve_secret(_vault_cfg, password, val)
+                except Exception:
+                    cfg[field] = ""
+            else:
+                cfg[field] = ""
+        elif val.startswith(_ENC_PREFIX):
             try:
                 cfg[field] = _decrypt_field(val, password)
             except Exception:
@@ -253,6 +291,8 @@ def get_channels_for_workspace(workspace_id: str) -> List[Dict[str, Any]]:
 def reencrypt_all_sensitive(old_password: str, new_password: str) -> int:
     """
     Re-encrypt every sensitive notification channel secret with *new_password*.
+    Fields that are already Vault references are left unchanged (they do not
+    depend on the portal password).
     Returns the count of channels updated.
     """
     from app.crypto import decrypt, encrypt
@@ -265,6 +305,9 @@ def reencrypt_all_sensitive(old_password: str, new_password: str) -> int:
         changed = False
         for field in fields:
             val = cfg.get(field) or ""
+            if val.startswith("vault:"):
+                # Vault refs are independent of portal password – skip
+                continue
             if val.startswith(_ENC_PREFIX):
                 try:
                     plaintext = decrypt(val[len(_ENC_PREFIX):], old_password)

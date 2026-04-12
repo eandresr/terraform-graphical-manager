@@ -150,25 +150,42 @@ def encrypt_fields(data: Dict[str, Any], backend_type: str, password: str) -> Di
     """
     Return a copy of *data* where sensitive fields are Fernet-encrypted.
     Plain fields are passed through unchanged.
+    Vault reference strings (``vault:<path>``) are left as-is.
     """
     from app.crypto import encrypt
     result = dict(data)
     for field in SENSITIVE_FIELDS.get(backend_type, []):
-        if result.get(field):
-            result[field] = encrypt(result[field], password)
+        val = result.get(field)
+        if val and not val.startswith("vault:"):
+            result[field] = encrypt(val, password)
     return result
 
 
 def decrypt_fields(data: Dict[str, Any], backend_type: str, password: str) -> Dict[str, Any]:
     """
     Return a copy of *data* where sensitive fields are decrypted to plaintext.
-    Raises ValueError if decryption fails.
+    Vault reference strings (``vault:<path>``) are resolved via vault_manager.
+    Raises ValueError if Fernet decryption fails on a non-Vault value.
     """
     from app.crypto import decrypt
     result = dict(data)
     for field in SENSITIVE_FIELDS.get(backend_type, []):
-        if result.get(field):
-            result[field] = decrypt(result[field], password)
+        val = result.get(field)
+        if not val:
+            continue
+        if val.startswith("vault:"):
+            # Resolve from Vault — requires Flask app context.
+            try:
+                from app import vault_manager
+                from flask import current_app
+                cfg = current_app.config["TFG_CONFIG"]
+                result[field] = vault_manager.resolve_secret(cfg, password, val)
+            except Exception as exc:
+                raise ValueError(
+                    f"Could not resolve Vault secret for field {field!r}: {exc}"
+                ) from exc
+        else:
+            result[field] = decrypt(val, password)
     return result
 
 
