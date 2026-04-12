@@ -27,6 +27,8 @@ def export_execution_metrics(
     execution_meta: Dict[str, Any],
     config,
     workspace_name: str = "",
+    *,
+    enc_key: str = "",
 ) -> None:
     """
     Send metrics for a single completed execution.
@@ -55,9 +57,9 @@ def export_execution_metrics(
 
     try:
         if backend == "influxdb":
-            _send_influxdb(execution_meta, config, workspace_name)
+            _send_influxdb(execution_meta, config, workspace_name, enc_key=enc_key)
         elif backend == "prometheus":
-            _send_prometheus(execution_meta, config, workspace_name)
+            _send_prometheus(execution_meta, config, workspace_name, enc_key=enc_key)
         elif backend == "graphite":
             _send_graphite(execution_meta, config, workspace_name)
     except Exception as exc:
@@ -101,9 +103,15 @@ def _send_influxdb(
     meta: Dict[str, Any],
     config,
     workspace_name: str,
+    *,
+    enc_key: str = "",
 ) -> None:
     url = (config.metrics_influxdb_url or "").rstrip("/")
-    token = config.metrics_influxdb_token or ""
+    token = (
+        config.resolve_sensitive("metrics", "influxdb_token", enc_key)
+        if hasattr(config, "resolve_sensitive")
+        else (config.metrics_influxdb_token or "")
+    )
     org = config.metrics_influxdb_org or ""
     bucket = config.metrics_influxdb_bucket or "tgm"
     verify_ssl = getattr(config, "metrics_influxdb_verify_ssl", True)
@@ -159,13 +167,19 @@ def _send_prometheus(
     meta: Dict[str, Any],
     config,
     workspace_name: str,
+    *,
+    enc_key: str = "",
 ) -> None:
     url = (config.metrics_prometheus_url or "").rstrip("/")
     if not url:
         return
-    job = config.metrics_prometheus_job or "tgm"
+    job = config.metrics_prometheus_job or ""
     username = config.metrics_prometheus_username or ""
-    password = config.metrics_prometheus_password or ""
+    password = (
+        config.resolve_sensitive("metrics", "prometheus_password", enc_key)
+        if hasattr(config, "resolve_sensitive")
+        else (config.metrics_prometheus_password or "")
+    )
     verify_ssl = getattr(config, "metrics_prometheus_verify_ssl", True)
     prefix = (config.metrics_prefix or "tgm").strip("_. ")
 

@@ -166,17 +166,35 @@ def settings_save():
     updates["metrics.prefix"] = data.get("metrics_prefix", "tgm").strip()
     # InfluxDB
     updates["metrics.influxdb_url"] = data.get("metrics_influxdb_url", "").strip()
-    updates["metrics.influxdb_token"] = data.get("metrics_influxdb_token", "").strip()
     updates["metrics.influxdb_org"] = data.get("metrics_influxdb_org", "").strip()
     updates["metrics.influxdb_bucket"] = data.get("metrics_influxdb_bucket", "tgm").strip()
     updates["metrics.influxdb_verify_ssl"] = (
         "true" if data.get("metrics_influxdb_verify_ssl") == "1" else "false"
     )
+    # Sensitive metrics fields — route to Vault if enabled.
+    from flask import session as _ms
+    _menc = _ms.get("tgm_enc_key", "")
+    for _msec, _mkey, _mform in [
+        ("metrics", "influxdb_token",      "metrics_influxdb_token"),
+        ("metrics", "prometheus_password", "metrics_prometheus_password"),
+    ]:
+        _mval = data.get(_mform, "").strip()
+        if not _mval or _mval == "\u2022" * 8:
+            # Keep existing stored value (Vault ref or plaintext)
+            pass
+        elif config.vault_enabled and _menc:
+            from app import vault_manager as _mvm
+            _mpath = _mvm.backend_credential_path(
+                config.vault_path_prefix, _msec, _mkey
+            )
+            updates[f"{_msec}.{_mkey}"] = _mvm.store_secret(config, _menc, _mpath, _mval)
+        else:
+            updates[f"{_msec}.{_mkey}"] = _mval
     # Prometheus
     updates["metrics.prometheus_url"] = data.get("metrics_prometheus_url", "").strip()
     updates["metrics.prometheus_job"] = data.get("metrics_prometheus_job", "tgm").strip()
     updates["metrics.prometheus_username"] = data.get("metrics_prometheus_username", "").strip()
-    updates["metrics.prometheus_password"] = data.get("metrics_prometheus_password", "").strip()
+    # prometheus_password handled above (vault-aware)
     updates["metrics.prometheus_verify_ssl"] = (
         "true" if data.get("metrics_prometheus_verify_ssl") == "1" else "false"
     )
@@ -228,19 +246,39 @@ def settings_save():
                     reencrypt_all_notif_sensitive(old_enc_key, new_password)
                 except Exception:
                     pass
-                # Re-encrypt backend credentials
+                # Re-encrypt backend credentials (skip if Vault is the secrets backend)
                 try:
                     from app.backend_config import (
                         get_backend_config, save_backend_config,
-                        decrypt_fields, encrypt_fields, SENSITIVE_FIELDS,
+                        decrypt_fields, SENSITIVE_FIELDS,
                     )
                     bc = get_backend_config(config)
                     bt = (bc.get("type") or "").lower().strip()
                     if bt and SENSITIVE_FIELDS.get(bt):
-                        bc_plain = decrypt_fields(bc, bt, old_enc_key)
-                        bc_reenc = encrypt_fields(bc_plain, bt, new_password)
-                        bc_reenc["type"] = bt
-                        save_backend_config(config, bc_reenc)
+                        # If all sensitive fields are Vault refs, nothing to re-encrypt.
+                        sensitive_vals = [
+                            bc.get(f, "") for f in SENSITIVE_FIELDS[bt] if bc.get(f)
+                        ]
+                        all_vault = sensitive_vals and all(
+                            str(v).startswith("vault:") for v in sensitive_vals
+                        )
+                        if not all_vault:
+                            bc_plain = decrypt_fields(bc, bt, old_enc_key)
+                            # Re-encrypt only fields that are NOT Vault refs.
+                            bc_reenc = {}
+                            for f in SENSITIVE_FIELDS[bt]:
+                                val = bc_plain.get(f)
+                                if val and not str(val).startswith("vault:"):
+                                    from app.crypto import encrypt as _enc
+                                    bc_reenc[f] = _enc(val, new_password)
+                                elif val:
+                                    bc_reenc[f] = val  # vault ref, leave unchanged
+                            bc_reenc["type"] = bt
+                            # Preserve non-sensitive fields
+                            for k, v in bc.items():
+                                if k not in bc_reenc:
+                                    bc_reenc[k] = v
+                            save_backend_config(config, bc_reenc)
                 except Exception:
                     pass
             # Keep the enc_key in session in sync with the new password
@@ -502,3 +540,184 @@ def api_tf_versions_uninstall(version):
         return jsonify({"error": f"Could not remove directory: {exc}"}), 500
 
     return jsonify({"uninstalled": version}), 200
+
+
+# ---------------------------------------------------------------------------
+# Vault settings API
+# ---------------------------------------------------------------------------
+
+@settings_bp.route("/api/vault/config", methods=["GET"])
+def api_vault_get_config():
+    """Return the current Vault configuration (sensitive fields masked)."""
+    config = current_app.config["TFG_CONFIG"]
+    return jsonify({
+        "enabled":       config.vault_enabled,
+        "url":           config.vault_url,
+        "auth_method":   config.vault_auth_method,
+        "token":         "••••••••" if config.vault_token else "",
+        "role_id":       config.vault_role_id,
+        "secret_id":     "••••••••" if config.vault_secret_id else "",
+        "mount":         config.vault_mount or "secret",
+        "path_prefix":   config.vault_path_prefix or "tgm",
+        "namespace":     config.vault_namespace,
+        "verify_ssl":    config.vault_verify_ssl,
+    })
+
+
+@settings_bp.route("/api/vault/config", methods=["POST"])
+def api_vault_save_config():
+    """Save Vault configuration. Sensitive fields (token, secret_id) are Fernet-encrypted."""
+    from flask import session as _session
+    config = current_app.config["TFG_CONFIG"]
+    body = request.get_json(silent=True) or {}
+    enc_key = _session.get("tgm_enc_key", "")
+
+    # Vault requires the portal to be password-protected so the auth credentials
+    # can be encrypted at rest and decrypted at connection time.
+    if body.get("enabled") and not enc_key:
+        return jsonify({
+            "ok": False,
+            "error": "The portal must be password-protected to enable Vault.",
+        }), 400
+    if body.get("enabled") and not config.lock_password_hash:
+        return jsonify({
+            "ok": False,
+            "error": "Set a portal password before enabling Vault.",
+        }), 400
+
+    updates = {}
+    updates["vault.enabled"] = "true" if body.get("enabled") else "false"
+    updates["vault.url"] = (body.get("url") or "").strip().rstrip("/")
+    auth_method = (body.get("auth_method") or "token").strip().lower()
+    if auth_method not in ("token", "approle"):
+        auth_method = "token"
+    updates["vault.auth_method"] = auth_method
+
+    updates["vault.mount"] = (body.get("mount") or "secret").strip()
+    updates["vault.path_prefix"] = (body.get("path_prefix") or "tgm").strip()
+    updates["vault.namespace"] = (body.get("namespace") or "").strip()
+    updates["vault.verify_ssl"] = "true" if body.get("verify_ssl", True) else "false"
+
+    if auth_method == "token":
+        token_val = (body.get("token") or "").strip()
+        if token_val and token_val != "••••••••":
+            if enc_key:
+                from app.crypto import encrypt as _encrypt
+                updates["vault.token"] = _encrypt(token_val, enc_key)
+            else:
+                updates["vault.token"] = token_val
+        # keep role_id/secret_id clear
+        updates["vault.role_id"] = ""
+        updates["vault.secret_id"] = ""
+    else:  # approle
+        updates["vault.role_id"] = (body.get("role_id") or "").strip()
+        secret_id_val = (body.get("secret_id") or "").strip()
+        if secret_id_val and secret_id_val != "••••••••":
+            if enc_key:
+                from app.crypto import encrypt as _encrypt
+                updates["vault.secret_id"] = _encrypt(secret_id_val, enc_key)
+            else:
+                updates["vault.secret_id"] = secret_id_val
+        updates["vault.token"] = ""
+
+    try:
+        config.save(updates)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True})
+
+
+@settings_bp.route("/api/vault/test", methods=["POST"])
+def api_vault_test():
+    """Test connectivity and authentication with the supplied Vault credentials."""
+    from flask import session as _session
+    from app.vault_manager import test_vault_connection
+    config = current_app.config["TFG_CONFIG"]
+    body = request.get_json(silent=True) or {}
+    enc_key = _session.get("tgm_enc_key", "")
+
+    url = (body.get("url") or config.vault_url or "").strip().rstrip("/")
+    auth_method = (body.get("auth_method") or config.vault_auth_method or "token").lower()
+    mount = (body.get("mount") or config.vault_mount or "secret").strip()
+    namespace = (body.get("namespace") or config.vault_namespace or "").strip()
+    verify_ssl = body.get("verify_ssl", config.vault_verify_ssl)
+
+    token = ""
+    role_id = ""
+    secret_id = ""
+
+    if auth_method == "token":
+        token_raw = (body.get("token") or "").strip()
+        if token_raw and token_raw != "••••••••":
+            token = token_raw
+        elif config.vault_token and enc_key:
+            from app.crypto import decrypt as _decrypt
+            try:
+                token = _decrypt(config.vault_token, enc_key)
+            except Exception:
+                token = config.vault_token
+    else:
+        role_id = (body.get("role_id") or config.vault_role_id or "").strip()
+        secret_id_raw = (body.get("secret_id") or "").strip()
+        if secret_id_raw and secret_id_raw != "••••••••":
+            secret_id = secret_id_raw
+        elif config.vault_secret_id and enc_key:
+            from app.crypto import decrypt as _decrypt
+            try:
+                secret_id = _decrypt(config.vault_secret_id, enc_key)
+            except Exception:
+                secret_id = config.vault_secret_id
+
+    result = test_vault_connection(
+        url=url,
+        auth_method=auth_method,
+        token=token,
+        role_id=role_id,
+        secret_id=secret_id,
+        mount=mount,
+        namespace=namespace,
+        verify_ssl=verify_ssl,
+    )
+    status = 200 if result.get("ok") else 502
+    return jsonify(result), status
+
+
+@settings_bp.route("/api/vault/migrate-to-vault", methods=["POST"])
+def api_vault_migrate_to_vault():
+    """
+    Migrate all Fernet-encrypted sensitive variables to Vault.
+    Vault must be enabled and reachable before calling this endpoint.
+    """
+    from flask import session as _session
+    from app.vault_manager import migrate_to_vault
+    config = current_app.config["TFG_CONFIG"]
+    enc_key = _session.get("tgm_enc_key", "")
+    if not config.vault_enabled:
+        return jsonify({"ok": False, "error": "Vault is not enabled."}), 400
+    try:
+        summary = migrate_to_vault(config, enc_key)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, **summary})
+
+
+@settings_bp.route("/api/vault/migrate-from-vault", methods=["POST"])
+def api_vault_migrate_from_vault():
+    """
+    Pull all Vault-referenced sensitive variables back to local Fernet encryption
+    and remove the corresponding Vault paths.
+    """
+    from flask import session as _session
+    from app.vault_manager import migrate_from_vault
+    config = current_app.config["TFG_CONFIG"]
+    enc_key = _session.get("tgm_enc_key", "")
+    try:
+        summary = migrate_from_vault(config, enc_key, enc_key)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    # After migrating back, disable Vault in config automatically
+    try:
+        config.save({"vault.enabled": "false"})
+    except Exception:
+        pass
+    return jsonify({"ok": True, **summary})

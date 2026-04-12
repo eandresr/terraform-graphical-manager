@@ -7,9 +7,9 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-3xl mx-auto space-y-8" x-data="settingsPage()" x-init="init()">
+<div class="max-w-[1280px] mx-auto" x-data="settingsPage()" x-init="init()">
 
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between mb-8">
     <div>
       <h1 class="text-2xl font-bold text-gray-900">Settings</h1>
       <p class="text-gray-500 text-sm mt-1">Changes are persisted to <code class="text-gray-700 font-mono">tfg.conf</code>.</p>
@@ -21,12 +21,106 @@
     </button>
   </div>
 
+  <!-- Two-column layout: in-page nav sidebar + main content -->
+  <div class="flex gap-8 items-start">
+
+    <!-- ========== LEFT: sticky in-page navigation ========== -->
+    <nav id="settings-sidenav"
+         class="w-52 shrink-0 sticky top-4 self-start hidden lg:block">
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">On this page</p>
+      <ul class="space-y-0.5" id="sidenav-list">
+        <li>
+          <a href="#sec-workspaces"
+             class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+             data-section="sec-workspaces">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+            </svg>
+            <span>Workspaces</span>
+          </a>
+        </li>
+        <li>
+          <a href="#sec-execution"
+             class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+             data-section="sec-execution">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            <span>Execution</span>
+          </a>
+        </li>
+        <li>
+          <a href="#sec-terraform"
+             class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+             data-section="sec-terraform">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+            </svg>
+            <span>Terraform Versions</span>
+          </a>
+        </li>
+        <li>
+          <a href="#sec-sentinel"
+             class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+             data-section="sec-sentinel">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+            <span>Sentinel</span>
+          </a>
+        </li>
+        <li>
+          <a href="#sec-security"
+             class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+             data-section="sec-security">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+            <span>Portal Security</span>
+          </a>
+        </li>
+        <li>
+          <a href="#sec-history"
+             class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+             data-section="sec-history">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span>Run History</span>
+          </a>
+        </li>
+        <li>
+          <a href="#sec-vault"
+             class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+             data-section="sec-vault">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 018 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
+            </svg>
+            <span>Vault</span>
+          </a>
+        </li>
+        <li>
+          <a href="#sec-backend"
+             class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+             data-section="sec-backend">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+            </svg>
+            <span>Storage Backend</span>
+          </a>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- ========== RIGHT: main content ========== -->
+    <div class="flex-1 min-w-0 space-y-8">
+
   <form id="settings-form" method="POST" action="{{ url_for('settings.settings_save') }}" class="space-y-8">
 
     <!-- --------------------------------------------------------
          Section: Workspaces
          -------------------------------------------------------- -->
-    <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <section id="sec-workspaces" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
         <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
@@ -79,7 +173,7 @@
     <!-- --------------------------------------------------------
          Section: Execution
          -------------------------------------------------------- -->
-    <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <section id="sec-execution" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
         <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
@@ -105,7 +199,7 @@
     <!-- --------------------------------------------------------
          Section: Terraform Versions
          -------------------------------------------------------- -->
-    <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <section id="sec-terraform" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
         <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -245,7 +339,7 @@
     <!-- --------------------------------------------------------
          Section: Sentinel Policy Integration
          -------------------------------------------------------- -->
-    <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <section id="sec-sentinel" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
         <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -421,7 +515,7 @@
     <!-- --------------------------------------------------------
          Section: Portal Security (lock password)
          -------------------------------------------------------- -->
-    <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <section id="sec-security" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
         <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -627,7 +721,7 @@
     <!-- --------------------------------------------------------
          Section: Run History Retention
          -------------------------------------------------------- -->
-    <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
+    <section id="sec-history" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
              x-data="{ retentionMode: '{{ config.history_retention_mode }}' }">
       <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
         <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -762,9 +856,374 @@
   </form>
 
   <!-- --------------------------------------------------------
+       Section: HashiCorp Vault — secrets backend
+       -------------------------------------------------------- -->
+  <section id="sec-vault" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
+           x-data="vaultSection()"
+           x-init="load()">
+
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
+      <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+      </svg>
+      <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">HashiCorp Vault</h2>
+      <span class="ml-2 text-xs px-2 py-0.5 rounded-full font-medium"
+            :class="cfg.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'"
+            x-text="cfg.enabled ? 'Enabled' : 'Disabled'"></span>
+    </div>
+
+    <div class="px-6 py-5 space-y-5">
+
+      <!-- Info box -->
+      <div class="flex items-start space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+        <svg class="w-4 h-4 mt-0.5 shrink-0 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <div>
+          When Vault is enabled, <strong>sensitive variables</strong> (variable groups and workspace-level
+          variables) are stored in HashiCorp Vault KV-v2 instead of being encrypted locally.
+          Use the <strong>migration buttons</strong> below to move secrets between backends.
+        </div>
+      </div>
+
+      <div x-show="loadError" class="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-3" x-text="loadError"></div>
+
+      <!-- ── Connection settings ───────────────────────────────────── -->
+      <div class="space-y-4">
+        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Connection</h3>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <!-- Url -->
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Vault URL <span class="text-red-500">*</span></label>
+            <input type="url" x-model="cfg.url" placeholder="https://vault.example.com:8200"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tf-400"/>
+          </div>
+          <!-- Mount (KV-v2) -->
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">KV-v2 mount</label>
+            <input type="text" x-model="cfg.mount" placeholder="secret"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tf-400"/>
+          </div>
+          <!-- Path prefix -->
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Path prefix</label>
+            <input type="text" x-model="cfg.path_prefix" placeholder="tgm"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"/>
+            <p class="mt-1 text-xs text-gray-400">Secrets are stored under <code class="bg-gray-100 px-1 rounded">&lt;mount&gt;/data/&lt;prefix&gt;/...</code></p>
+          </div>
+          <!-- Namespace (Enterprise) -->
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Namespace <span class="text-gray-400">(Enterprise)</span></label>
+            <input type="text" x-model="cfg.namespace" placeholder="admin/ (optional)"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"/>
+          </div>
+        </div>
+
+        <!-- Verify SSL -->
+        <label class="flex items-center space-x-2 cursor-pointer">
+          <input type="checkbox" x-model="cfg.verify_ssl" class="rounded accent-tf-600"/>
+          <span class="text-sm text-gray-700">Verify SSL certificate</span>
+        </label>
+      </div>
+
+      <!-- ── Auth method ────────────────────────────────────────────── -->
+      <div class="space-y-4">
+        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Authentication</h3>
+
+        <!-- Method selector -->
+        <div class="flex space-x-4">
+          <label class="flex items-center space-x-2 cursor-pointer">
+            <input type="radio" x-model="cfg.auth_method" value="token" class="accent-tf-600"/>
+            <span class="text-sm text-gray-700">Token</span>
+          </label>
+          <label class="flex items-center space-x-2 cursor-pointer">
+            <input type="radio" x-model="cfg.auth_method" value="approle" class="accent-tf-600"/>
+            <span class="text-sm text-gray-700">AppRole</span>
+          </label>
+        </div>
+
+        <!-- Token auth -->
+        <div x-show="cfg.auth_method === 'token'">
+          <label class="block text-xs font-medium text-gray-700 mb-1">Vault Token <span class="text-red-500">*</span></label>
+          <input type="password" x-model="cfg.token"
+                 :placeholder="cfg.token === '••••••••' ? '●●●●●●●● (saved)' : 'hvs.xxxxx'"
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"/>
+          <p class="mt-1 text-xs text-gray-400">Stored encrypted in tfg.conf.</p>
+        </div>
+
+        <!-- AppRole auth -->
+        <div x-show="cfg.auth_method === 'approle'" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Role ID <span class="text-red-500">*</span></label>
+            <input type="text" x-model="cfg.role_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"/>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Secret ID <span class="text-red-500">*</span></label>
+            <input type="password" x-model="cfg.secret_id"
+                   :placeholder="cfg.secret_id === '••••••••' ? '●●●●●●●● (saved)' : 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-tf-400"/>
+            <p class="mt-1 text-xs text-gray-400">Stored encrypted in tfg.conf.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Enable toggle + Test + Save ──────────────────────────── -->
+      <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100">
+        <label class="flex items-center space-x-2 cursor-pointer mr-2">
+          <input type="checkbox" x-model="cfg.enabled" class="rounded accent-tf-600"/>
+          <span class="text-sm font-medium text-gray-700">Enable Vault secrets backend</span>
+        </label>
+
+        <button @click="testConnection()"
+                :disabled="testing || saving"
+                class="px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50">
+          <span x-text="testing ? 'Testing…' : 'Test connection'"></span>
+        </button>
+
+        <button @click="save()"
+                :disabled="saving || testing"
+                class="px-4 py-1.5 bg-tf-600 hover:bg-tf-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50">
+          <span x-text="saving ? 'Saving…' : 'Save Vault settings'"></span>
+        </button>
+
+        <!-- Test result badge -->
+        <span x-show="testResult !== null" class="text-xs font-medium px-2 py-1 rounded-full"
+              :class="testResult && testResult.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+              x-text="testResult ? (testResult.ok ? '✓ Connected (Vault ' + (testResult.version || '') + ')' : '✗ ' + testResult.error) : ''">
+        </span>
+
+        <span x-show="saveResult" class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">
+          ✓ Saved
+        </span>
+        <span x-show="saveError" class="text-xs text-red-600" x-text="saveError"></span>
+      </div>
+
+      <!-- ── Migration ─────────────────────────────────────────────── -->
+      <div class="border-t border-gray-100 pt-5 space-y-3">
+        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Migration</h3>
+        <p class="text-xs text-gray-500">
+          Move all existing <strong>sensitive variables</strong> between the local encrypted storage and Vault.
+          Save Vault settings first before migrating.
+        </p>
+
+        <div class="flex flex-wrap gap-3">
+          <!-- To Vault -->
+          <button @click="migrateToVault()"
+                  :disabled="migrating"
+                  class="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>
+            </svg>
+            <span x-text="migrating === 'to' ? 'Migrating…' : 'Local → Vault'"></span>
+          </button>
+
+          <!-- From Vault -->
+          <button @click="migrateFromVault()"
+                  :disabled="migrating"
+                  class="flex items-center space-x-1.5 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 8v12m0 0l4-4m-4 4L3 16M17 16V4m0 0l4 4m-4-4l-4 4"/>
+            </svg>
+            <span x-text="migrating === 'from' ? 'Migrating…' : 'Vault → Local'"></span>
+          </button>
+        </div>
+
+        <!-- Migration result -->
+        <div x-show="migrateResult !== null" class="text-xs rounded-lg p-3"
+             :class="migrateResult && !migrateResult.errors?.length ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-amber-50 text-amber-800 border border-amber-200'">
+          <template x-if="migrateResult">
+            <div>
+              <p class="font-semibold" x-text="migrateResult.ok ? '✓ Migration complete' : '✗ Migration failed'"></p>
+              <p x-show="migrateResult.vars_migrated !== undefined"
+                 x-text="migrateResult.vars_migrated + ' variable(s) migrated'"></p>
+              <ul x-show="migrateResult.errors && migrateResult.errors.length" class="mt-1 list-disc list-inside space-y-0.5">
+                <template x-for="e in (migrateResult.errors || [])" :key="e">
+                  <li x-text="e" class="text-amber-700"></li>
+                </template>
+              </ul>
+            </div>
+          </template>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Vault migration confirmation modal ────────────────────────── -->
+    <div x-show="confirmModal !== null" x-cloak x-transition.opacity
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+         @keydown.escape.window="confirmModal = null">
+      <div @click.stop class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
+        <div class="px-6 py-5">
+          <div class="flex items-start space-x-4">
+
+            <!-- Icon: indigo for →Vault, amber for →Local -->
+            <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center"
+                 :class="confirmModal === 'to' ? 'bg-indigo-100' : 'bg-amber-100'">
+              <!-- To Vault: shield -->
+              <template x-if="confirmModal === 'to'">
+                <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+              </template>
+              <!-- From Vault: warning -->
+              <template x-if="confirmModal === 'from'">
+                <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                </svg>
+              </template>
+            </div>
+
+            <div class="flex-1 min-w-0">
+              <!-- To Vault -->
+              <template x-if="confirmModal === 'to'">
+                <div>
+                  <h3 class="text-base font-semibold text-gray-900">Migrate secrets to Vault?</h3>
+                  <p class="mt-1.5 text-sm text-gray-600">
+                    All locally-encrypted secrets will be written to Vault and replaced
+                    with <code class="bg-gray-100 px-1 rounded text-xs">vault:&lt;path&gt;</code> references.
+                    This includes:
+                  </p>
+                  <ul class="mt-2 text-sm text-gray-600 list-disc list-inside space-y-0.5">
+                    <li>Sensitive variables in groups and workspaces</li>
+                    <li>Storage backend credentials (AWS / GCP / Azure)</li>
+                    <li>Notification channel secrets (webhooks, tokens, passwords)</li>
+                    <li>InfluxDB token and Prometheus password</li>
+                  </ul>
+                  <p class="mt-2 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded p-2">
+                    Make sure the Vault configuration has been saved and the connection is working before proceeding.
+                  </p>
+                </div>
+              </template>
+
+              <!-- From Vault -->
+              <template x-if="confirmModal === 'from'">
+                <div>
+                  <h3 class="text-base font-semibold text-gray-900">Migrate secrets back to local storage?</h3>
+                  <p class="mt-1.5 text-sm text-gray-600">
+                    All Vault-referenced secrets will be pulled and encrypted locally with Fernet.
+                    The corresponding Vault paths will be <strong>permanently deleted</strong>.
+                    Vault will be disabled automatically after the migration completes.
+                  </p>
+                  <p class="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                    This action cannot be undone. Make sure the portal is unlocked and you have a backup if needed.
+                  </p>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer buttons -->
+        <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end space-x-3">
+          <button @click="confirmModal = null"
+                  class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            Cancel
+          </button>
+          <button @click="_doMigrate()"
+                  :class="confirmModal === 'to'
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    : 'bg-amber-600 hover:bg-amber-700 text-white'"
+                  class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
+            <span x-text="confirmModal === 'to' ? 'Migrate to Vault' : 'Migrate to local'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <script>
+  function vaultSection() {
+    return {
+      cfg: {
+        enabled: false, url: '', auth_method: 'token',
+        token: '', role_id: '', secret_id: '',
+        mount: 'secret', path_prefix: 'tgm', namespace: '', verify_ssl: true,
+      },
+      loadError: null,
+      testing: false,
+      testResult: null,
+      saving: false,
+      saveResult: false,
+      saveError: null,
+      migrating: null,
+      migrateResult: null,
+      confirmModal: null,
+
+      async load() {
+        try {
+          const res = await fetch('/api/vault/config');
+          if (res.ok) this.cfg = await res.json();
+          else this.loadError = 'Failed to load Vault config.';
+        } catch (e) { this.loadError = e.message; }
+      },
+
+      async testConnection() {
+        this.testing = true; this.testResult = null;
+        try {
+          const res = await fetch('/api/vault/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(this.cfg),
+          });
+          this.testResult = await res.json();
+        } catch (e) { this.testResult = {ok: false, error: e.message}; }
+        this.testing = false;
+        setTimeout(() => { this.testResult = null; }, 8000);
+      },
+
+      async save() {
+        this.saving = true; this.saveResult = false; this.saveError = null;
+        try {
+          const res = await fetch('/api/vault/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(this.cfg),
+          });
+          const d = await res.json();
+          if (d.ok) {
+            this.saveResult = true;
+            setTimeout(() => { this.saveResult = false; }, 4000);
+            await this.load();
+          } else {
+            this.saveError = d.error || 'Save failed.';
+          }
+        } catch (e) { this.saveError = e.message; }
+        this.saving = false;
+      },
+
+      migrateToVault()   { this.confirmModal = 'to'; },
+      migrateFromVault() { this.confirmModal = 'from'; },
+
+      async _doMigrate() {
+        const dir = this.confirmModal;
+        this.confirmModal = null;
+        this.migrating = dir;
+        this.migrateResult = null;
+        try {
+          const url = dir === 'to'
+            ? '/api/vault/migrate-to-vault'
+            : '/api/vault/migrate-from-vault';
+          const res = await fetch(url, {method: 'POST'});
+          this.migrateResult = await res.json();
+          if (dir === 'from' && this.migrateResult.ok) {
+            this.cfg.enabled = false;
+          }
+        } catch (e) { this.migrateResult = {ok: false, errors: [e.message]}; }
+        this.migrating = null;
+      },
+    };
+  }
+  </script>
+
+  <!-- --------------------------------------------------------
        Section: Storage Backend (configurable via UI)
        -------------------------------------------------------- -->
-  <section class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
+  <section id="sec-backend" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
            x-data="backendConfigSection()"
            x-init="init()">
 
@@ -1511,11 +1970,77 @@
     </div>
   </div>
 
+    </div><!-- /.flex-1 main content -->
+  </div><!-- /.flex two-column layout -->
+
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+  // -----------------------------------------------------------------------
+  // In-page navigation: highlight active section via IntersectionObserver
+  // -----------------------------------------------------------------------
+  (function () {
+    const SECTIONS = [
+      'sec-workspaces', 'sec-execution', 'sec-terraform', 'sec-sentinel',
+      'sec-security', 'sec-history', 'sec-vault', 'sec-backend'
+    ];
+    const ACTIVE_CLS = ['bg-tf-50', 'text-tf-700', 'font-semibold'];
+    const INACTIVE_CLS = ['text-gray-600'];
+
+    function setActive(id) {
+      SECTIONS.forEach(sid => {
+        const link = document.querySelector(`.sidenav-link[data-section="${sid}"]`);
+        if (!link) return;
+        if (sid === id) {
+          link.classList.remove(...INACTIVE_CLS);
+          link.classList.add(...ACTIVE_CLS);
+        } else {
+          link.classList.remove(...ACTIVE_CLS);
+          link.classList.add(...INACTIVE_CLS);
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      // The real scroll container is <main>, not window
+      const scrollEl = document.querySelector('main');
+      const sections = SECTIONS.map(id => document.getElementById(id)).filter(Boolean);
+      if (!sections.length) return;
+
+      // Set first section active initially
+      setActive(sections[0].id);
+
+      const observer = new IntersectionObserver(entries => {
+        // Pick the topmost visible section
+        const visible = entries
+          .filter(e => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length) setActive(visible[0].target.id);
+      }, { root: scrollEl, rootMargin: '-10% 0px -70% 0px', threshold: 0 });
+
+      sections.forEach(s => observer.observe(s));
+
+      // Smooth-scroll on nav link click
+      document.querySelectorAll('.sidenav-link').forEach(link => {
+        link.addEventListener('click', function (e) {
+          const targetId = this.getAttribute('data-section');
+          const target = document.getElementById(targetId);
+          if (target && scrollEl) {
+            e.preventDefault();
+            const offset = 16;
+            const containerTop = scrollEl.getBoundingClientRect().top;
+            const targetTop = target.getBoundingClientRect().top;
+            const newTop = scrollEl.scrollTop + (targetTop - containerTop) - offset;
+            scrollEl.scrollTo({ behavior: 'smooth', top: Math.max(0, newTop) });
+            setActive(targetId);
+          }
+        });
+      });
+    });
+  })();
+
   // -----------------------------------------------------------------------
   // Migration store (shared between backendConfigSection and the modal)
   // -----------------------------------------------------------------------

@@ -98,6 +98,15 @@ def workspace_detail(workspace_id: str):
 
     _threading.Thread(target=_bg_check, daemon=True, name=f"gh-check-{workspace_id[:8]}").start()
 
+    from flask import session as _session
+    _enc_key = _session.get("tgm_enc_key", "")
+    eq = current_app.config["EXECUTION_QUEUE"]
+    runs = sorted(
+        eq.list_for_workspace(workspace_id, _enc_key),
+        key=lambda r: r.timestamp,
+        reverse=True,
+    )
+
     return render_template(
         "workspace.html",
         workspace=workspace,
@@ -108,6 +117,7 @@ def workspace_detail(workspace_id: str):
         global_policy_sets=global_policy_sets,
         sentinel_enforce_on_plan=config.sentinel_enforce_on_plan,
         sentinel_enforce_on_apply=config.sentinel_enforce_on_apply,
+        runs=runs,
     )
 
 

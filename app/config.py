@@ -204,6 +204,79 @@ class Config:
         """'tcp' or 'udp'."""
         return self._parser.get("metrics", "graphite_protocol", fallback="tcp").strip().lower()
 
+    # ------------------------------------------------------------------
+    # HashiCorp Vault — secrets backend for sensitive variables
+    # ------------------------------------------------------------------
+
+    @property
+    def vault_enabled(self) -> bool:
+        """Whether Vault is configured as the secrets backend."""
+        return self._parser.getboolean("vault", "enabled", fallback=False)
+
+    @property
+    def vault_url(self) -> str:
+        return self._parser.get("vault", "url", fallback="")
+
+    @property
+    def vault_auth_method(self) -> str:
+        """One of: 'token', 'approle'."""
+        return self._parser.get("vault", "auth_method", fallback="token").strip().lower()
+
+    @property
+    def vault_token(self) -> str:
+        """Stored encrypted Vault token (auth_method=token)."""
+        return self._parser.get("vault", "token", fallback="")
+
+    @property
+    def vault_role_id(self) -> str:
+        """AppRole role_id (auth_method=approle)."""
+        return self._parser.get("vault", "role_id", fallback="")
+
+    @property
+    def vault_secret_id(self) -> str:
+        """Stored encrypted AppRole secret_id (auth_method=approle)."""
+        return self._parser.get("vault", "secret_id", fallback="")
+
+    @property
+    def vault_mount(self) -> str:
+        """KV-v2 mount path, defaults to 'secret'."""
+        return self._parser.get("vault", "mount", fallback="secret")
+
+    @property
+    def vault_path_prefix(self) -> str:
+        """Optional path prefix inside the mount, e.g. 'tgm'."""
+        return self._parser.get("vault", "path_prefix", fallback="tgm")
+
+    @property
+    def vault_namespace(self) -> str:
+        """Optional Vault Enterprise namespace."""
+        return self._parser.get("vault", "namespace", fallback="")
+
+    @property
+    def vault_verify_ssl(self) -> bool:
+        return self._parser.getboolean("vault", "verify_ssl", fallback=True)
+
+    def resolve_sensitive(self, section: str, key: str, enc_key: str = "") -> str:
+        """
+        Read *key* from *section* and, if the stored value is a ``vault:<path>``
+        reference and Vault is enabled, resolve it to plaintext via Vault.
+
+        For non-Vault strings the raw value is returned unchanged (callers are
+        responsible for any Fernet decryption if needed).
+
+        Requires Flask application context when resolving Vault refs.
+        """
+        raw = self._parser.get(section, key, fallback="")
+        if raw.startswith("vault:") and self.vault_enabled:
+            if not enc_key:
+                return ""   # portal key required to authenticate with Vault
+            try:
+                from app.vault_manager import resolve_secret
+                return resolve_secret(self, enc_key, raw)
+            except Exception:
+                return ""
+        return raw
+
     def save(self, updates: dict) -> None:
         """
         Persist *updates* back to tfg.conf.

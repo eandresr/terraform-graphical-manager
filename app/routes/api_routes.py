@@ -137,13 +137,20 @@ def submit_run(workspace_id: str):
             _raw = _var.get("value") or ""
             _is_sensitive = _var.get("sensitive", False)
             if _is_sensitive:
-                if not _enc_key or not _raw:
+                if not _raw:
                     continue
                 try:
-                    _val = _decrypt(_raw, _enc_key)
+                    from app.vault_manager import is_vault_ref, resolve_secret
+                    if is_vault_ref(_raw):
+                        _vault_cfg = current_app.config.get("TFG_CONFIG")
+                        _val = resolve_secret(_vault_cfg, _enc_key, _raw)
+                    else:
+                        if not _enc_key:
+                            continue
+                        _val = _decrypt(_raw, _enc_key)
                     _sensitive_values.append(_val)
                     _display = "***"
-                except ValueError:
+                except (ValueError, RuntimeError):
                     continue
             else:
                 _val = _raw
@@ -1373,7 +1380,16 @@ def save_workspace_vars(workspace_id: str):
                     {"ok": False, "error": "Portal password required for sensitive variables."}
                 ), 400
             if v.get("value"):
-                v["value"] = encrypt(v["value"], password)
+                # Route to Vault or local Fernet depending on config
+                _vault_cfg = current_app.config.get("TFG_CONFIG")
+                if _vault_cfg is not None and _vault_cfg.vault_enabled:
+                    from app.vault_manager import store_secret, workspace_var_path
+                    _path = workspace_var_path(
+                        _vault_cfg.vault_path_prefix, workspace_id, key
+                    )
+                    v["value"] = store_secret(_vault_cfg, password, _path, v["value"])
+                else:
+                    v["value"] = encrypt(v["value"], password)
             elif key in existing_map and existing_map[key].get("sensitive"):
                 v["value"] = existing_map[key]["value"]
             else:
@@ -1622,9 +1638,16 @@ def save_backend_config_api():
             else:
                 data.pop(field, None)
         else:
-            # Encrypt the new plaintext value
-            from app.crypto import encrypt as _encrypt
-            data[field] = _encrypt(new_val, enc_key)
+            # Encrypt the new plaintext value — route to Vault if enabled.
+            if config.vault_enabled:
+                from app import vault_manager as _vm
+                _path = _vm.backend_credential_path(
+                    config.vault_path_prefix, backend_type, field
+                )
+                data[field] = _vm.store_secret(config, enc_key, _path, new_val)
+            else:
+                from app.crypto import encrypt as _encrypt
+                data[field] = _encrypt(new_val, enc_key)
 
     # If the backend type is changing, stash the current (old) config so the
     # migration endpoint can still reach the source credentials after the new
