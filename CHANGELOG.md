@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] — 2026-04-13
+
+### Added
+
+#### Automation Workflows — per-workspace post-run hooks
+- New **`app/workflow_runner.py`** module implements a full workflow engine that fires
+  after every successful plan or apply execution within a workspace.
+- Four **built-in plugin types** available out of the box:
+  - **Script** — shell / Python / any custom interpreter; command receives `TGM_*`
+    environment variables for workspace name, run ID, status, and outcome.
+  - **API (Token)** — arbitrary HTTP endpoint with Bearer-token or custom-header
+    authentication; supports GET / POST / PUT / PATCH / DELETE, JSON body, and
+    per-workflow SSL-verification toggle.
+  - **Rundeck Job** — triggers a Rundeck job via the REST API v42; supports job
+    arguments and configurable timeout.
+  - **Jenkins Job** — triggers a `buildWithParameters` action via the Jenkins API
+    using Basic auth (username + API token); HTTP 201 is treated as success.
+- **Template variables** resolved inside every string field before dispatch:
+  - `{{ var.NAME }}` — workspace-level Terraform variable
+  - `{{ env.NAME }}` — OS environment variable at dispatch time
+  - `{{ run.NAME }}` — execution metadata (`run.id`, `run.status`, `run.workspace`,
+    `run.outcome`, `run.terraform_version`, `run.timestamp`)
+- **Plugin extension API** — third-party Python packages can contribute new workflow
+  types by subclassing `WorkflowPlugin` and calling `register_plugin(cls)` or using
+  the `@register_plugin` decorator.
+- **Secrets encrypted at rest** using the same Fernet / HashiCorp Vault pattern as
+  notification channels; secrets are masked to `***` in all API responses.
+- **REST API** (7 new endpoints, prefix `/api`):
+  - `GET /api/workflows?workspace_id=X` — list (masked)
+  - `POST /api/workflows` — create (encrypted on save)
+  - `GET /api/workflows/<id>?workspace_id=X` — retrieve (masked)
+  - `PUT /api/workflows/<id>?workspace_id=X` — update
+  - `DELETE /api/workflows/<id>?workspace_id=X` — remove
+  - `POST /api/workflows/<id>/test` — fire with synthetic context
+  - `GET /api/workflows/plugins` — list registered plugin metadata
+- **Workflows tab** added to the workspace detail page (11th tab) with a full CRUD
+  modal, per-type dynamic config forms, inline test-result toast, and workflow result
+  badges on every run row in the history list.
+- **`workflow_results`** field added to `Execution.to_dict()` / `from_metadata()`
+  and to run `metadata.json`; stored results are shown as colour-coded labels in the
+  run history.
+- New storage methods: `list_workspace_workflows`, `save_workspace_workflow`,
+  `delete_workspace_workflow`, `patch_execution_workflow_results` added to
+  `local_backend.py` (and to the abstract backend contract).
+
+#### Python deprecation-warning suppression
+- `run.py` and `app/cli.py` now suppress the **`google.auth` / `google.oauth2` /
+  `google.api_core` `FutureWarning`** about Python 3.9 reaching end-of-life, so
+  the startup output is clean for users still on Python 3.9.
+
+### Changed
+- `pyproject.toml` version bumped `1.3.0 → 1.4.0`.
+
+---
+
 ## [1.3.0] — 2026-04-12
 
 ### Added
