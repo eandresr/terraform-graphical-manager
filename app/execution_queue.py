@@ -70,6 +70,7 @@ class Execution:
         self.state_resource_count: Optional[int] = None  # resource count from state after apply
         self.terraform_binary: Optional[str] = None  # resolved path to tf binary
         self._workdir: Optional[str] = None  # temp dir for plan artefacts
+        self.workflow_results: List[Dict[str, Any]] = []  # populated after execution
         self._canceled = threading.Event()
         self._lock = threading.Lock()
 
@@ -110,6 +111,7 @@ class Execution:
             "run_params": self.run_params,
             "git_ref": self.git_ref,
             "git_pull": getattr(self, "git_pull", False),
+            "workflow_results": getattr(self, "workflow_results", []) or [],
         }
 
     @classmethod
@@ -139,6 +141,7 @@ class Execution:
         obj.sensitive_values = []
         obj.git_pull = meta.get("git_pull", False)
         obj.git_ref = meta.get("git_ref")
+        obj.workflow_results = meta.get("workflow_results") or []
         obj.enc_key = ""
         obj._workdir = None
         obj._canceled = threading.Event()
@@ -406,6 +409,27 @@ class ExecutionQueue:
                     execution.to_dict(),
                     _ws_name_n,
                 )
+            except Exception:
+                pass
+            # Dispatch automation workflows (best-effort, never breaks run)
+            try:
+                from app.workflow_runner import dispatch_workflows
+                _ws_name_w = execution.workspace_path.rstrip("/").split("/")[-1]
+                _wf_results = dispatch_workflows(
+                    execution.to_dict(),
+                    _ws_name_w,
+                    enc_key=execution.enc_key,
+                )
+                if _wf_results:
+                    execution.workflow_results = [
+                        r.to_dict() for r in _wf_results
+                    ]
+                    from app.storage import get_backend as _get_backend
+                    _get_backend(execution.enc_key).patch_execution_workflow_results(
+                        execution.workspace_id,
+                        execution.id,
+                        execution.workflow_results,
+                    )
             except Exception:
                 pass
             # Release the execution lock now that the run has finished.

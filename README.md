@@ -15,6 +15,7 @@
     <a href="#-hashicorp-vault">HashiCorp Vault</a> ·
     <a href="#-metrics-export">Metrics Export</a> ·
     <a href="#-notification-channels">Notifications</a> ·
+    <a href="#-automation-workflows">Automation Workflows</a> ·
     <a href="#%EF%B8%8F-backend-configuration-ui">Backend Config UI</a> ·
     <a href="#-api-management-panel">API Management</a> ·
     <a href="#-rest-api">REST API</a> ·
@@ -55,6 +56,7 @@ No cloud account required. No authentication. No internet needed. Runs entirely 
 | **Execution statistics** | Per-workspace run history charts (duration trend, resource-change counts) rendered with Chart.js in the Overview tab |
 | **Metrics export** | Push execution metrics to InfluxDB v2, Prometheus Pushgateway, or Graphite after every run · Per-workspace opt-in toggle · Configurable prefix |
 | **Notification channels** | Alert Slack, Microsoft Teams, Email/SMTP, PagerDuty, or Prometheus Alertmanager when runs finish · Global or workspace-scoped channels · Dedicated **sidebar panel** for global channel management · Configurable triggers (success / failure / Sentinel fail) · Customisable prefix and body templates with variable substitution |
+| **Automation Workflows** | Per-workspace workflows triggered after plan/apply · 4 built-in types: Script, API (Token), Rundeck Job, Jenkins Job · Template variables (`{{ var.* }}`, `{{ env.* }}`, `{{ run.* }}`) · Secrets encrypted at rest (Fernet/Vault) · Plugin extension API · Results stored in run history with colour-coded labels |
 | **Backend Config UI** | Configure AWS S3, GCP Cloud Storage, Azure Blob Storage, or local backend directly from Settings · Credentials encrypted at rest (Fernet) · Connectivity test with write/read/delete probe · AWS STS assume-role support · **Manual diff+migrate panel**: compare local vs cloud object counts and migrate in one click · One-click source data deletion after migration |
 | **API Management Panel** | Interactive REST API documentation and live client at `/api-docs` · Swagger-style colour-coded endpoint cards (GET / POST / PUT / DELETE) · Live try-it panel with path/query/body inputs · Authentication section with Bearer-token auto-retrieval when portal lock is enabled · Filter by method or text · Response viewer with copy button |
 
@@ -848,6 +850,88 @@ Open the **Notifications** tab in any workspace to:
 
 ---
 
+## ⚡ Automation Workflows
+
+TGM can fire **post-run workflows** automatically after every plan or apply completes inside a workspace.
+
+### Built-in plugin types
+
+| Type | How it works |
+|---|---|
+| **Script** | Runs a shell, Python, or any custom interpreter script. Receives `TGM_WORKSPACE`, `TGM_RUN_ID`, `TGM_STATUS`, `TGM_COMMAND`, `TGM_OUTCOME`, and `TGM_TIMESTAMP` as environment variables. |
+| **API (Token)** | Sends an HTTP request (GET / POST / PUT / PATCH / DELETE) to a configurable URL with Bearer-token or custom-header authentication. Supports a JSON body, extra headers, and an SSL-verification toggle. |
+| **Rundeck Job** | Triggers a Rundeck job through the REST API v42. Supports API-token auth, job arguments, and a configurable timeout. |
+| **Jenkins Job** | Fires a `buildWithParameters` action against the Jenkins API using Basic auth (username + API token). HTTP 201 is treated as success. |
+
+### Template variables
+
+Every string field in a workflow configuration (URL, script body, headers, etc.) supports
+three variable namespaces resolved at dispatch time:
+
+| Syntax | Source |
+|---|---|
+| `{{ var.NAME }}` | Workspace-level Terraform variable (value decrypted at dispatch if encrypted) |
+| `{{ env.NAME }}` | OS environment variable at dispatch time |
+| `{{ run.id }}` | Execution ID |
+| `{{ run.status }}` | `completed` \| `failed` \| `canceled` |
+| `{{ run.workspace }}` | Workspace name |
+| `{{ run.outcome }}` | `plan` \| `apply` |
+| `{{ run.terraform_version }}` | Terraform binary version used |
+| `{{ run.timestamp }}` | ISO-8601 finish timestamp |
+
+Sensitive variable values are rendered as `***` in logs.
+
+### Trigger conditions
+
+| Trigger | When it fires |
+|---|---|
+| `on_success` | Execution finished with status `completed` |
+| `on_failure` | Execution finished with status `failed` |
+| `on_plan` | Command was `plan` (regardless of outcome) |
+| `on_apply` | Command was `apply` (regardless of outcome) |
+
+Each workflow has an independent trigger list.
+
+### Secret handling
+
+Sensitive fields (API tokens, Rundeck/Jenkins API tokens) are **encrypted at rest** using
+the same Fernet / HashiCorp Vault pattern as notification channels. All API responses
+mask secrets as `***`; raw values are only used at dispatch time.
+
+### Plugin extension API
+
+Third-party Python packages can register additional workflow types:
+
+```python
+from app.workflow_runner import WorkflowPlugin, register_plugin
+
+@register_plugin
+class MyPlugin(WorkflowPlugin):
+    type_id = "my_tool"
+    display_name = "My Tool"
+    sensitive_fields = ["api_secret"]
+
+    def execute(self, config: dict, context: dict) -> "WorkflowResult":
+        ...
+```
+
+### Managing workflows
+
+Open the **Workflows** tab in any workspace to:
+
+- **Create** a workflow with a name, type, trigger conditions, and type-specific config.
+- **Enable / disable** a workflow without deleting it.
+- **Test** — fires the workflow immediately with a synthetic context.
+- **Edit** or **delete** a workflow.
+
+Workflow results appear as colour-coded lightning-bolt badges on every run row in the
+Run History list:  
+- **Emerald** — all workflows succeeded  
+- **Red** — at least one workflow failed  
+- **Gray** — all workflows were skipped (trigger condition not met)
+
+---
+
 ## 💻 API Management Panel
 
 TGM ships a built-in interactive API console at **`/api-docs`** — accessible via the
@@ -998,6 +1082,18 @@ All UI features are powered by a JSON REST API. Base path: `/api/`
 | `GET` | `/api/workspace/{id}/notification-channels` | List channels assigned to (or scoped to) a workspace |
 | `POST` | `/api/workspace/{id}/notification-channels/assign` | Assign a global channel to a workspace (`{channel_id}`) |
 | `POST` | `/api/workspace/{id}/notification-channels/unassign` | Remove a global channel from a workspace (`{channel_id}`) |
+
+### Automation Workflows
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/workflows?workspace_id={id}` | List workflows for a workspace (secrets masked) |
+| `POST` | `/api/workflows` | Create a new workflow (secrets encrypted on save) |
+| `GET` | `/api/workflows/{workflow_id}?workspace_id={id}` | Get a single workflow (secrets masked) |
+| `PUT` | `/api/workflows/{workflow_id}?workspace_id={id}` | Update a workflow |
+| `DELETE` | `/api/workflows/{workflow_id}?workspace_id={id}` | Delete a workflow |
+| `POST` | `/api/workflows/{workflow_id}/test` | Fire workflow with synthetic context |
+| `GET` | `/api/workflows/plugins` | List registered plugin types and their config schema |
 
 ### Backend Configuration
 

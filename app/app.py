@@ -99,6 +99,7 @@ def create_app(config_path: str = None) -> Flask:
     from app.routes.settings_routes import settings_bp
     from app.routes.auth_routes import auth_bp
     from app.routes.notification_routes import notification_bp
+    from app.routes.workflow_routes import workflow_bp
 
     app.register_blueprint(workspace_bp)
     app.register_blueprint(execution_bp, url_prefix="/executions")
@@ -106,6 +107,7 @@ def create_app(config_path: str = None) -> Flask:
     app.register_blueprint(settings_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(notification_bp, url_prefix="/api")
+    app.register_blueprint(workflow_bp, url_prefix="/api")
 
     # ------------------------------------------------------------------
     # Portal lock — gate ALL routes when a password is configured

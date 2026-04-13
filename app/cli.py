@@ -14,6 +14,14 @@ Usage examples::
 """
 import argparse
 import os
+import warnings
+
+# Suppress FutureWarnings from Google libraries about Python 3.9 EOL.
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    module=r"google\.(auth|oauth2|api_core)",
+)
 
 
 # ---------------------------------------------------------------------------

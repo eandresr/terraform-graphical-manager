@@ -30,6 +30,16 @@
       <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">On this page</p>
       <ul class="space-y-0.5" id="sidenav-list">
         <li>
+          <a href="#sec-security"
+             class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+             data-section="sec-security">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+            <span>Portal Security</span>
+          </a>
+        </li>
+        <li>
           <a href="#sec-workspaces"
              class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
              data-section="sec-workspaces">
@@ -70,23 +80,13 @@
           </a>
         </li>
         <li>
-          <a href="#sec-security"
-             class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-             data-section="sec-security">
-            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-            </svg>
-            <span>Portal Security</span>
-          </a>
-        </li>
-        <li>
           <a href="#sec-history"
              class="sidenav-link flex items-center space-x-2 px-2 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
              data-section="sec-history">
             <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
-            <span>Run History</span>
+            <span>History</span>
           </a>
         </li>
         <li>
@@ -116,6 +116,213 @@
     <div class="flex-1 min-w-0 space-y-8">
 
   <form id="settings-form" method="POST" action="{{ url_for('settings.settings_save') }}" class="space-y-8">
+
+    <!-- --------------------------------------------------------
+    <!-- --------------------------------------------------------
+         Section: Portal Security (lock password)
+         -------------------------------------------------------- -->
+    <section id="sec-security" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
+        <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+        <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">Portal Security</h2>
+        {% if config.lock_password_hash %}
+          <span class="ml-auto inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+            </svg>
+            <span>Protected</span>
+          </span>
+        {% else %}
+          <span class="ml-auto inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500">
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z"/>
+            </svg>
+            <span>Unlocked</span>
+          </span>
+        {% endif %}
+      </div>
+
+      <div class="px-6 py-5 space-y-5">
+        <p class="text-xs text-gray-500">
+          Set a password to restrict access to the portal. Browser sessions are protected with a login page.
+          Direct API calls require an <code class="font-mono text-gray-700">Authorization: Bearer &lt;token&gt;</code> header.
+          The password is stored as a PBKDF2 hash in <code class="font-mono text-gray-700">tfg.conf</code>.
+        </p>
+
+        <!-- Set / change password -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="lock_password">
+            {% if config.lock_password_hash %}Change password{% else %}Set password{% endif %}
+          </label>
+          <input id="lock_password" name="lock_password" type="password"
+                 autocomplete="new-password"
+                 class="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg text-sm
+                        focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent"
+                 placeholder="{% if config.lock_password_hash %}Enter new password to change…{% else %}New password…{% endif %}">
+          <p class="mt-1 text-xs text-gray-500">
+            Leave blank to keep the current password unchanged.
+            For sensitive variable encryption, use a strong passphrase —
+            <strong>8 random words</strong> or a <strong>100-bit</strong> random string recommended.
+          </p>
+        </div>
+
+        {% if config.lock_password_hash %}
+          <!-- API token (loaded on-demand, never in HTML source) -->
+          <div class="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-2"
+               x-data="{
+                 token: null,
+                 shown: false,
+                 loading: false,
+                 async reveal() {
+                   if (!this.token) {
+                     this.loading = true;
+                     try {
+                       const r = await fetch('/api/settings/api-token');
+                       const d = await r.json();
+                       this.token = d.token || null;
+                     } finally { this.loading = false; }
+                   }
+                   this.shown = !this.shown;
+                 },
+                 async copy() {
+                   if (!this.token) await this.reveal();
+                   navigator.clipboard.writeText(this.token)
+                     .then(() => { this.$refs.copyBtn.textContent = 'Copied!'; setTimeout(() => this.$refs.copyBtn.textContent = 'Copy', 1500); })
+                     .catch(() => {});
+                 }
+               }">
+            <p class="text-xs font-semibold text-gray-700">API Bearer Token</p>
+            <p class="text-xs text-gray-500">
+              Use this token for headless / CI access. It is re-generated automatically when you change the password.
+            </p>
+            <div class="flex items-center space-x-2 mt-1">
+              <input :type="shown ? 'text' : 'password'"
+                     :value="token || ''"
+                     readonly
+                     placeholder="Click Show to reveal…"
+                     class="flex-1 font-mono text-xs px-2 py-1.5 bg-white border border-gray-300 rounded-md text-gray-800 select-all placeholder-gray-400">
+              <button type="button" @click="reveal()"
+                      :disabled="loading"
+                      class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-md bg-white hover:bg-gray-50 transition-colors flex-shrink-0"
+                      :class="loading ? 'opacity-50 cursor-wait' : ''">
+                <span x-text="shown ? 'Hide' : (loading ? '…' : 'Show')"></span>
+              </button>
+              <button type="button" x-ref="copyBtn" @click="copy()"
+                      class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-md bg-white hover:bg-gray-50 transition-colors flex-shrink-0">
+                Copy
+              </button>
+            </div>
+            <p x-show="shown && token" class="text-xs text-gray-400 font-mono mt-1 break-all">
+              Authorization: Bearer <span x-text="token"></span>
+            </p>
+          </div>
+
+          <!-- Remove lock -->
+          <div class="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
+            <div>
+              <p class="text-sm font-medium text-red-800">Remove portal security</p>
+              <p class="text-xs text-red-600 mt-0.5">The portal will become publicly accessible without a password (if port is open to outside).</p>
+            </div>
+            <button type="button" @click="openRemoveLock()"
+                    class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors flex-shrink-0 ml-4">
+              Disable security
+            </button>
+            <input type="hidden" id="remove-lock-field" name="remove_lock_password" value="">
+          </div>
+
+          <!-- Remove lock confirmation modal -->
+          <div x-show="removeLockOpen" x-cloak x-transition.opacity
+               class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+               @keydown.escape.window="removeLockOpen = false">
+            <div @click.stop
+                 class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
+              <div class="px-6 py-5">
+                <div class="flex items-start space-x-4">
+                  <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                    </svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <h3 class="text-base font-semibold text-gray-900">Remove portal lock password?</h3>
+                    <p class="mt-1.5 text-sm text-gray-600">
+                      Anyone on the network will be able to access the portal without authentication.
+                    </p>
+
+                    <!-- Sensitive vars list -->
+                    <template x-if="removeLockVars.length > 0">
+                      <div class="mt-3">
+                        <p class="text-sm font-medium text-amber-800 mb-2">
+                          The following sensitive variables will no longer be available after removing the lock.
+                          If you do not plan to keep them as plain text, consider exporting their values first:
+                        </p>
+                        <div class="max-h-52 overflow-y-auto rounded-lg border border-amber-200 bg-amber-50 divide-y divide-amber-100">
+                          <template x-for="(v, i) in removeLockVars" :key="i">
+                            <div class="px-3 py-2 text-xs font-mono flex flex-wrap items-center gap-1">
+                              <span class="text-amber-600" x-text="v.folder"></span>
+                              <template x-if="v.folder !== '(global)'">
+                                <svg class="w-3 h-3 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                                </svg>
+                              </template>
+                              <span class="text-amber-700 font-semibold" x-text="v.workspace"></span>
+                              <svg class="w-3 h-3 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                              </svg>
+                              <span class="text-gray-600" x-text="v.group"></span>
+                              <svg class="w-3 h-3 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                              </svg>
+                              <span class="text-red-700 font-semibold" x-text="v.variable"></span>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                    </template>
+                    <template x-if="removeLockVarsLoading">
+                      <p class="mt-3 text-xs text-gray-400">Loading sensitive variables…</p>
+                    </template>
+                    <template x-if="!removeLockVarsLoading && removeLockVars.length === 0">
+                      <p class="mt-3 text-xs text-gray-500">No sensitive variables are currently configured.</p>
+                    </template>
+
+                    <!-- Unsensitize option -->
+                    <template x-if="!removeLockVarsLoading && removeLockVars.length > 0">
+                      <label class="mt-4 flex items-start gap-2.5 cursor-pointer select-none">
+                        <input type="checkbox" x-model="removeLockUnsensitize"
+                               class="mt-0.5 w-4 h-4 rounded border-gray-300 text-tf-600 focus:ring-tf-400 cursor-pointer flex-shrink-0">
+                        <span class="text-sm text-gray-700">
+                          Decrypt and store values as plain text
+                          <span class="block text-xs text-gray-400 mt-0.5">
+                            The listed variables will no longer be marked as sensitive and their values will be stored in plaintext.
+                          </span>
+                        </span>
+                      </label>
+                    </template>
+                  </div>
+                </div>
+              </div>
+              <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+                <button type="button" @click="removeLockOpen = false"
+                        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                  Cancel
+                </button>
+                <button type="button"
+                        @click="confirmRemoveLock()"
+                        class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
+                  Remove lock
+                </button>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+
+      </div>
+    </section>
 
     <!-- --------------------------------------------------------
          Section: Workspaces
@@ -178,7 +385,7 @@
         <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
         </svg>
-        <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">Execution</h2>
+        <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">Parallelization</h2>
       </div>
       <div class="px-6 py-5 space-y-4">
         <div>
@@ -513,213 +720,7 @@
     </section>
 
     <!-- --------------------------------------------------------
-         Section: Portal Security (lock password)
-         -------------------------------------------------------- -->
-    <section id="sec-security" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center space-x-2">
-        <svg class="w-4 h-4 text-tf-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-        </svg>
-        <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">Portal Security</h2>
-        {% if config.lock_password_hash %}
-          <span class="ml-auto inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
-            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
-            </svg>
-            <span>Protected</span>
-          </span>
-        {% else %}
-          <span class="ml-auto inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500">
-            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z"/>
-            </svg>
-            <span>Unlocked</span>
-          </span>
-        {% endif %}
-      </div>
-
-      <div class="px-6 py-5 space-y-5">
-        <p class="text-xs text-gray-500">
-          Set a password to restrict access to the portal. Browser sessions are protected with a login page.
-          Direct API calls require an <code class="font-mono text-gray-700">Authorization: Bearer &lt;token&gt;</code> header.
-          The password is stored as a PBKDF2 hash in <code class="font-mono text-gray-700">tfg.conf</code>.
-        </p>
-
-        <!-- Set / change password -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1" for="lock_password">
-            {% if config.lock_password_hash %}Change password{% else %}Set password{% endif %}
-          </label>
-          <input id="lock_password" name="lock_password" type="password"
-                 autocomplete="new-password"
-                 class="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg text-sm
-                        focus:outline-none focus:ring-2 focus:ring-tf-400 focus:border-transparent"
-                 placeholder="{% if config.lock_password_hash %}Enter new password to change…{% else %}New password…{% endif %}">
-          <p class="mt-1 text-xs text-gray-500">
-            Leave blank to keep the current password unchanged.
-            For sensitive variable encryption, use a strong passphrase —
-            <strong>8 random words</strong> or a <strong>100-bit</strong> random string recommended.
-          </p>
-        </div>
-
-        {% if config.lock_password_hash %}
-          <!-- API token (loaded on-demand, never in HTML source) -->
-          <div class="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-2"
-               x-data="{
-                 token: null,
-                 shown: false,
-                 loading: false,
-                 async reveal() {
-                   if (!this.token) {
-                     this.loading = true;
-                     try {
-                       const r = await fetch('/api/settings/api-token');
-                       const d = await r.json();
-                       this.token = d.token || null;
-                     } finally { this.loading = false; }
-                   }
-                   this.shown = !this.shown;
-                 },
-                 async copy() {
-                   if (!this.token) await this.reveal();
-                   navigator.clipboard.writeText(this.token)
-                     .then(() => { this.$refs.copyBtn.textContent = 'Copied!'; setTimeout(() => this.$refs.copyBtn.textContent = 'Copy', 1500); })
-                     .catch(() => {});
-                 }
-               }">
-            <p class="text-xs font-semibold text-gray-700">API Bearer Token</p>
-            <p class="text-xs text-gray-500">
-              Use this token for headless / CI access. It is re-generated automatically when you change the password.
-            </p>
-            <div class="flex items-center space-x-2 mt-1">
-              <input :type="shown ? 'text' : 'password'"
-                     :value="token || ''"
-                     readonly
-                     placeholder="Click Show to reveal…"
-                     class="flex-1 font-mono text-xs px-2 py-1.5 bg-white border border-gray-300 rounded-md text-gray-800 select-all placeholder-gray-400">
-              <button type="button" @click="reveal()"
-                      :disabled="loading"
-                      class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-md bg-white hover:bg-gray-50 transition-colors flex-shrink-0"
-                      :class="loading ? 'opacity-50 cursor-wait' : ''">
-                <span x-text="shown ? 'Hide' : (loading ? '…' : 'Show')"></span>
-              </button>
-              <button type="button" x-ref="copyBtn" @click="copy()"
-                      class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-md bg-white hover:bg-gray-50 transition-colors flex-shrink-0">
-                Copy
-              </button>
-            </div>
-            <p x-show="shown && token" class="text-xs text-gray-400 font-mono mt-1 break-all">
-              Authorization: Bearer <span x-text="token"></span>
-            </p>
-          </div>
-
-          <!-- Remove lock -->
-          <div class="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
-            <div>
-              <p class="text-sm font-medium text-red-800">Remove portal security</p>
-              <p class="text-xs text-red-600 mt-0.5">The portal will become publicly accessible without a password (if port is open to outside).</p>
-            </div>
-            <button type="button" @click="openRemoveLock()"
-                    class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors flex-shrink-0 ml-4">
-              Disable security
-            </button>
-            <input type="hidden" id="remove-lock-field" name="remove_lock_password" value="">
-          </div>
-
-          <!-- Remove lock confirmation modal -->
-          <div x-show="removeLockOpen" x-cloak x-transition.opacity
-               class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-               @keydown.escape.window="removeLockOpen = false">
-            <div @click.stop
-                 class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
-              <div class="px-6 py-5">
-                <div class="flex items-start space-x-4">
-                  <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-                    <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                    </svg>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <h3 class="text-base font-semibold text-gray-900">Remove portal lock password?</h3>
-                    <p class="mt-1.5 text-sm text-gray-600">
-                      Anyone on the network will be able to access the portal without authentication.
-                    </p>
-
-                    <!-- Sensitive vars list -->
-                    <template x-if="removeLockVars.length > 0">
-                      <div class="mt-3">
-                        <p class="text-sm font-medium text-amber-800 mb-2">
-                          The following sensitive variables will no longer be available after removing the lock.
-                          If you do not plan to keep them as plain text, consider exporting their values first:
-                        </p>
-                        <div class="max-h-52 overflow-y-auto rounded-lg border border-amber-200 bg-amber-50 divide-y divide-amber-100">
-                          <template x-for="(v, i) in removeLockVars" :key="i">
-                            <div class="px-3 py-2 text-xs font-mono flex flex-wrap items-center gap-1">
-                              <span class="text-amber-600" x-text="v.folder"></span>
-                              <template x-if="v.folder !== '(global)'">
-                                <svg class="w-3 h-3 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
-                                </svg>
-                              </template>
-                              <span class="text-amber-700 font-semibold" x-text="v.workspace"></span>
-                              <svg class="w-3 h-3 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
-                              </svg>
-                              <span class="text-gray-600" x-text="v.group"></span>
-                              <svg class="w-3 h-3 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
-                              </svg>
-                              <span class="text-red-700 font-semibold" x-text="v.variable"></span>
-                            </div>
-                          </template>
-                        </div>
-                      </div>
-                    </template>
-                    <template x-if="removeLockVarsLoading">
-                      <p class="mt-3 text-xs text-gray-400">Loading sensitive variables…</p>
-                    </template>
-                    <template x-if="!removeLockVarsLoading && removeLockVars.length === 0">
-                      <p class="mt-3 text-xs text-gray-500">No sensitive variables are currently configured.</p>
-                    </template>
-
-                    <!-- Unsensitize option -->
-                    <template x-if="!removeLockVarsLoading && removeLockVars.length > 0">
-                      <label class="mt-4 flex items-start gap-2.5 cursor-pointer select-none">
-                        <input type="checkbox" x-model="removeLockUnsensitize"
-                               class="mt-0.5 w-4 h-4 rounded border-gray-300 text-tf-600 focus:ring-tf-400 cursor-pointer flex-shrink-0">
-                        <span class="text-sm text-gray-700">
-                          Decrypt and store values as plain text
-                          <span class="block text-xs text-gray-400 mt-0.5">
-                            The listed variables will no longer be marked as sensitive and their values will be stored in plaintext.
-                          </span>
-                        </span>
-                      </label>
-                    </template>
-                  </div>
-                </div>
-              </div>
-              <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-                <button type="button" @click="removeLockOpen = false"
-                        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                  Cancel
-                </button>
-                <button type="button"
-                        @click="confirmRemoveLock()"
-                        class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
-                  Remove lock
-                </button>
-              </div>
-            </div>
-          </div>
-        {% endif %}
-
-      </div>
-    </section>
-
-    <!-- --------------------------------------------------------
-         Section: Run History Retention
+         Section: History
          -------------------------------------------------------- -->
     <section id="sec-history" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
              x-data="{ retentionMode: '{{ config.history_retention_mode }}' }">
@@ -730,7 +731,7 @@
                    a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414
                    A1 1 0 006.586 13H4"/>
         </svg>
-        <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">Run History Retention</h2>
+        <h2 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">History</h2>
         <span x-show="retentionMode !== 'none'"
               class="ml-auto inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
           <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -1584,7 +1585,7 @@
                     </td>
                   </tr>
                   <tr>
-                    <td class="px-4 py-2 text-gray-700 font-medium">Executions</td>
+                    <td class="px-4 py-2 text-gray-700 font-medium">Parallelization</td>
                     <td class="px-4 py-2 text-center" x-text="diff.source_counts.executions"></td>
                     <td class="px-4 py-2 text-center" x-text="diff.dest_counts.executions"></td>
                     <td class="px-4 py-2 text-center">
@@ -1983,8 +1984,8 @@
   // -----------------------------------------------------------------------
   (function () {
     const SECTIONS = [
-      'sec-workspaces', 'sec-execution', 'sec-terraform', 'sec-sentinel',
-      'sec-security', 'sec-history', 'sec-vault', 'sec-backend'
+      'sec-security', 'sec-workspaces', 'sec-execution', 'sec-terraform',
+      'sec-sentinel', 'sec-history', 'sec-vault', 'sec-backend'
     ];
     const ACTIVE_CLS = ['bg-tf-50', 'text-tf-700', 'font-semibold'];
     const INACTIVE_CLS = ['text-gray-600'];

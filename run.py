@@ -6,6 +6,15 @@ Run with:  python run.py [--port PORT]
 import argparse
 import os
 import sys
+import warnings
+
+# Suppress FutureWarnings from Google libraries about Python 3.9 EOL.
+# These are cosmetic-only; they do not affect functionality.
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    module=r"google\.(auth|oauth2|api_core)",
+)
 
 # Anchor the project root **before** any app import so that app.py can locate
 # templates/ and static/ correctly even when installed non-editably.

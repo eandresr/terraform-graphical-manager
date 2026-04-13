@@ -272,6 +272,58 @@ class LocalBackend:
         except OSError:
             pass
 
+    # ------------------------------------------------------------------
+    # Workspace Workflows  (stored inside workspace_config.json)
+    # ------------------------------------------------------------------
+
+    def list_workspace_workflows(self, workspace_id: str) -> List[Dict[str, Any]]:
+        """Return all workflow definitions for a workspace."""
+        cfg = self.get_workspace_config(workspace_id)
+        return list(cfg.get("workflows") or [])
+
+    def save_workspace_workflow(
+        self, workspace_id: str, workflow: Dict[str, Any]
+    ) -> None:
+        """Upsert a single workflow in the workspace config."""
+        cfg = self.get_workspace_config(workspace_id)
+        workflows: List[Dict[str, Any]] = list(cfg.get("workflows") or [])
+        wf_id = workflow.get("id")
+        for i, wf in enumerate(workflows):
+            if wf.get("id") == wf_id:
+                workflows[i] = workflow
+                break
+        else:
+            workflows.append(workflow)
+        cfg["workflows"] = workflows
+        self.set_workspace_config(workspace_id, cfg)
+
+    def delete_workspace_workflow(
+        self, workspace_id: str, workflow_id: str
+    ) -> None:
+        """Remove a workflow from the workspace config."""
+        cfg = self.get_workspace_config(workspace_id)
+        workflows = [
+            wf for wf in (cfg.get("workflows") or [])
+            if wf.get("id") != workflow_id
+        ]
+        cfg["workflows"] = workflows
+        self.set_workspace_config(workspace_id, cfg)
+
+    def patch_execution_workflow_results(
+        self,
+        workspace_id: str,
+        execution_id: str,
+        results: List[Dict[str, Any]],
+    ) -> None:
+        """Append workflow execution results to the run's metadata.json."""
+        run_dir = self._find_run_dir(execution_id)
+        if run_dir is None:
+            return
+        path = os.path.join(run_dir, "metadata.json")
+        meta = self._read_json(path) or {}
+        meta["workflow_results"] = results
+        self._write_json(path, meta)
+
     def _find_run_dir(self, execution_id: str) -> Optional[str]:
         """Locate the run directory for a given execution UUID."""
         ws_root = os.path.join(self._root, "workspaces")
@@ -328,6 +380,7 @@ class LocalBackend:
             "state_resource_count": getattr(execution, "state_resource_count", None),
             "git_ref": getattr(execution, "git_ref", None),
             "git_pull": getattr(execution, "git_pull", False),
+            "workflow_results": getattr(execution, "workflow_results", []) or [],
         }
 
     @staticmethod
