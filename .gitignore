@@ -48,3 +48,8 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# setuptools output. A committed build/ tree is installed as-is by
+# `pip install .` when its mtimes match app/, so it must not be tracked.
+build/
+*.egg-info/
